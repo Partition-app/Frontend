@@ -301,7 +301,7 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 집안일 배정 모달과 동일한 글래스 카드 셸
+// 홈 설정 모달과 동일한 글래스 카드 셸
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _PartitionGlassModalCard extends StatelessWidget {
@@ -319,10 +319,18 @@ class _PartitionGlassModalCard extends StatelessWidget {
     final capWidth = math.min(maxWidth, math.max(280.0, screenW - 40));
 
     return PartitionGlassDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       constraints: BoxConstraints(
         maxWidth: capWidth,
       ),
-      fillColor: Colors.transparent,
+      borderRadius: BorderRadius.circular(24),
+      blurSigma: 18,
+      fillColor: const Color.fromRGBO(255, 255, 255, 0.12),
+      borderColor: const Color.fromRGBO(255, 255, 255, 0.22),
+      gradient: const LinearGradient(
+        colors: [Colors.transparent, Colors.transparent],
+      ),
+      boxShadow: const [],
       child: child,
     );
   }
@@ -659,21 +667,8 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '집 근처에 있을 때 룸메이트에게 알림을 보낼 수 있어요.',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.88),
-                fontSize: 13,
-                fontFamily: 'Pretendard Variable',
-                fontWeight: FontWeight.w400,
-                height: 1.08,
-                decoration: TextDecoration.none,
-              ),
-            ),
             const SizedBox(height: 18),
             Text(
-              '기능을 사용하려면 집 위치를 먼저 등록해야 해요.\n\n'
               '집 반경 300m 안에 들어오면 룸메이트에게\n'
               '조용한 알림이 전송됩니다.',
               style: TextStyle(
@@ -691,18 +686,10 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.35),
+                  color: PartitionUiTokens.surfaceBorderMuted,
                   width: 0.5,
                 ),
-                gradient: const RadialGradient(
-                  center: Alignment(-0.1212, -0.1178),
-                  radius: 1.7145,
-                  colors: [
-                    Color.fromRGBO(255, 255, 255, 0.06),
-                    Color.fromRGBO(255, 255, 255, 0.12),
-                  ],
-                  stops: [0.0, 1.0],
-                ),
+                color: PartitionUiTokens.surfaceFillMuted,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -741,36 +728,58 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
             ],
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _loading ? null : _onSetCurrentLocation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: HomeShareStyle.point,
-                  foregroundColor: HomeShareStyle.main,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      PartitionUiTokens.actionButtonRadius,
-                    ),
+              height: PartitionUiTokens.actionButtonHeight,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _loading ? null : _onSetCurrentLocation,
+                  borderRadius: BorderRadius.circular(
+                    PartitionUiTokens.actionButtonRadius,
                   ),
-                  elevation: 0,
-                ),
-                icon: _loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: HomeShareStyle.main,
+                  child: Opacity(
+                    opacity: _loading ? 0.55 : 1.0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(
+                          PartitionUiTokens.actionButtonRadius,
                         ),
-                      )
-                    : const Icon(Icons.my_location_rounded, size: 18),
-                label: Text(
-                  _loading ? '위치 가져오는 중...' : '현재 위치를 집으로 설정',
-                  style: const TextStyle(
-                    fontSize: PartitionUiTokens.actionFontSize,
-                    fontWeight: PartitionUiTokens.actionWeight,
-                    fontFamily: 'Pretendard Variable',
-                    decoration: TextDecoration.none,
+                        border: Border.all(
+                          color: PartitionUiTokens.actionButtonBorder,
+                        ),
+                        color: PartitionUiTokens.actionButtonFill,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_loading)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          else
+                            const Icon(
+                              Icons.my_location_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _loading ? '위치 가져오는 중...' : '현재 위치를 집으로 설정',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: PartitionUiTokens.actionFontSize,
+                              fontWeight: PartitionUiTokens.actionWeight,
+                              fontFamily: 'Pretendard Variable',
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

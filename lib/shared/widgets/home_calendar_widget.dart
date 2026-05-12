@@ -304,6 +304,10 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
 
   Future<void> _loadCalendarData(int year, int month, {bool forceRefresh = false}) async {
     final monthKey = '$year-${month.toString().padLeft(2, '0')}';
+    final useDummy = _partitionDummyActive == true ||
+        usePartitionDummyData(
+          Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+        );
     
     // 강제 갱신이 아니고 이미 같은 월의 데이터가 캐시되어 있으면 다시 로드하지 않음
     if (!forceRefresh && _cachedMonthKey == monthKey && _cachedEvents != null) {
@@ -311,6 +315,14 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     }
 
     if (!mounted) return;
+    if (useDummy) {
+      setState(() {
+        _isLoading = false;
+        _cachedEvents = {};
+        _cachedMonthKey = monthKey;
+      });
+      return;
+    }
     setState(() {
       _isLoading = true;
     });
@@ -430,6 +442,10 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
   /// 일간 캘린더 상세 조회
   Future<void> _loadDailyCalendarData(DateTime date, {bool forceRefresh = false}) async {
     final dateKey = _dateKey(date);
+    final useDummy = _partitionDummyActive == true ||
+        usePartitionDummyData(
+          Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+        );
     
     // 강제 갱신이 아니고 이미 같은 날짜의 데이터가 캐시되어 있으면 다시 로드하지 않음
     if (!forceRefresh && _cachedDailyDateKey == dateKey && _cachedDailyEvents != null && _cachedDailyEvents![dateKey] != null) {
@@ -440,6 +456,15 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     }
 
     if (!mounted) return;
+    if (useDummy) {
+      setState(() {
+        _isLoadingDaily = false;
+        _cachedDailyEvents ??= {};
+        _cachedDailyEvents!.remove(dateKey);
+        _cachedDailyDateKey = dateKey;
+      });
+      return;
+    }
     setState(() {
       _isLoadingDaily = true;
     });

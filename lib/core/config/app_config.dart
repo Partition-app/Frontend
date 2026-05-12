@@ -12,19 +12,25 @@ class AppConfig {
   
   // API 엔드포인트
   static const String loginEndpoint = '/auth/login';
+  static const String logoutEndpoint = '/auth/logout';
   static const String registerEndpoint = '/auth/register';
   static const String kakaoLoginEndpoint = '/auth/kakao';
   static const String householdsEndpoint = '/households';
+  /// 현재 로그인한 사용자의 그룹 정보 조회
+  static const String householdsMeEndpoint = '/households/me';
+  /// 그룹 이름 변경
+  static const String householdsNameEndpoint = '/households/name';
   static const String householdsJoinEndpoint = '/households/join';
   /// 현재 사용자 가구 탈퇴 (본문 규격은 백엔드 Swagger 기준으로 맞춤)
   static const String householdsLeaveEndpoint = '/households/leave';
   /// 그룹(가구) 멤버 목록 (정산 시 참여자 선택용)
   static const String householdMembersEndpoint = '/households/members';
-  /// 그룹장 위임 (그룹장만). 본문 예: `{ "newLeaderUserId": number }` — 백엔드 스펙과 다르면 수정
-  static const String householdsLeaderTransferEndpoint =
-      '/households/leader-transfer';
+  /// 그룹 리더 위임 (방장만). 본문 예: `{ "targetUserId": number }`
+  static const String householdsLeaderEndpoint = '/households/leader';
   /// PATCH 등에 사용. GET 내 정보 조회는 앱에서 호출하지 않음(백엔드 미구현).
   static const String updateUserNameEndpoint = '/users/me';
+  /// 회원 탈퇴 (POST, 본문 없음)
+  static const String userWithdrawEndpoint = '/users/me/withdraw';
   /// FCM 디바이스 토큰 등록·갱신 (PATCH JSON `fcmToken`)
   static const String userFcmTokenEndpoint = '/users/me/fcm-token';
   static const String userPreferencesEndpoint = '/users/me/preferences';

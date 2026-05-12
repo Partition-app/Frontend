@@ -697,8 +697,18 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: FrostedPanel(
-                borderRadius: BorderRadius.circular(20),
-                backgroundOpacity: 0.4,
+                borderRadius: BorderRadius.circular(18),
+                backgroundOpacity: 0.08,
+                borderColor: const Color.fromRGBO(255, 255, 255, 0.12),
+                strokeGradient: const RadialGradient(
+                  center: Alignment(0.1, -0.8),
+                  radius: 2.2,
+                  colors: [
+                    Color.fromRGBO(255, 255, 255, 0.11),
+                    Color.fromRGBO(255, 255, 255, 0.01),
+                  ],
+                  stops: [0.0, 1.0],
+                ),
                 padding:
                     const EdgeInsets.symmetric(horizontal: pad, vertical: 6),
                 child: Center(

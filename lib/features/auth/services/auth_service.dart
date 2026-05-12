@@ -17,8 +17,15 @@ import 'package:partition_app/features/auth/models/preference_response_model.dar
 class HouseholdMemberBrief {
   final int userId;
   final String name;
+  final String? profileImage;
+  final String? role;
 
-  const HouseholdMemberBrief({required this.userId, required this.name});
+  const HouseholdMemberBrief({
+    required this.userId,
+    required this.name,
+    this.profileImage,
+    this.role,
+  });
 }
 
 int? _parseHouseholdMemberUserId(Map<String, dynamic> e) {
@@ -39,6 +46,17 @@ String? _parseHouseholdMemberDisplayName(Map<String, dynamic> e) {
       e['userName'] as String?;
   final t = n?.trim();
   return (t != null && t.isNotEmpty) ? t : null;
+}
+
+String? _parseHouseholdMemberProfileImage(Map<String, dynamic> e) {
+  final raw = e['profileImage'] ?? e['profileImageUrl'] ?? e['imageUrl'];
+  final text = raw?.toString().trim();
+  return (text != null && text.isNotEmpty) ? text : null;
+}
+
+String? _parseHouseholdMemberRole(Map<String, dynamic> e) {
+  final raw = e['role']?.toString().trim().toUpperCase();
+  return (raw != null && raw.isNotEmpty) ? raw : null;
 }
 
 class AuthService {
@@ -94,6 +112,18 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    try {
+      await _apiClient.post(
+        AppConfig.logoutEndpoint,
+        data: null,
+        options: Options(
+          validateStatus: (status) =>
+              status != null && (status == 200 || status == 401 || status == 404),
+        ),
+      );
+    } catch (_) {
+      // 서버 로그아웃 실패와 관계없이 로컬 세션은 정리합니다.
+    }
     await StorageService.clear();
   }
 
@@ -217,11 +247,100 @@ class AuthService {
     }
   }
 
-  /// 회원 탈퇴(계정 삭제). 서버는 `DELETE /users/me` 를 가정합니다.
+  /// 회원 탈퇴(계정 삭제).
+  /// 현재 배포 서버 기준 `DELETE /users/me`를 우선 시도하고,
+  /// 서버가 신 경로만 열어둔 경우 `POST /users/me/withdraw`로 폴백합니다.
   Future<void> deleteMyAccountOnServer() async {
     try {
-      await _apiClient.delete(AppConfig.updateUserNameEndpoint);
+      final liveResponse = await _apiClient.delete(
+        AppConfig.updateUserNameEndpoint,
+        options: Options(
+          validateStatus: (status) =>
+              status != null &&
+              (status == 200 ||
+                  status == 204 ||
+                  status == 400 ||
+                  status == 401 ||
+                  status == 403 ||
+                  status == 404 ||
+                  status == 500),
+        ),
+      );
+      if (liveResponse.statusCode == 200 || liveResponse.statusCode == 204) {
+        final data = liveResponse.data;
+        if (data is Map<String, dynamic> && data['isSuccess'] == false) {
+          final message = (data['message'] as String?)?.trim();
+          throw ApiException(
+            message:
+                message != null && message.isNotEmpty
+                    ? message
+                    : '회원 탈퇴에 실패했어요.',
+            statusCode: liveResponse.statusCode,
+          );
+        }
+        return;
+      }
+
+      if (liveResponse.statusCode != 404) {
+        final data = liveResponse.data;
+        final message =
+            data is Map<String, dynamic>
+                ? (data['message'] as String?)?.trim()
+                : null;
+        throw ApiException(
+          message:
+              message != null && message.isNotEmpty
+                  ? message
+                  : '회원 탈퇴에 실패했어요.',
+          statusCode: liveResponse.statusCode,
+        );
+      }
+
+      final fallbackResponse = await _apiClient.post(
+        AppConfig.userWithdrawEndpoint,
+        data: null,
+        options: Options(
+          validateStatus: (status) =>
+              status != null &&
+              (status == 200 ||
+                  status == 204 ||
+                  status == 400 ||
+                  status == 401 ||
+                  status == 403 ||
+                  status == 404 ||
+                  status == 500),
+        ),
+      );
+      if (fallbackResponse.statusCode == 200 ||
+          fallbackResponse.statusCode == 204) {
+        final data = fallbackResponse.data;
+        if (data is Map<String, dynamic> && data['isSuccess'] == false) {
+          final message = (data['message'] as String?)?.trim();
+          throw ApiException(
+            message:
+                message != null && message.isNotEmpty
+                    ? message
+                    : '회원 탈퇴에 실패했어요.',
+            statusCode: fallbackResponse.statusCode,
+          );
+        }
+        return;
+      }
+
+      final fallbackData = fallbackResponse.data;
+      final fallbackMessage =
+          fallbackData is Map<String, dynamic>
+              ? (fallbackData['message'] as String?)?.trim()
+              : null;
+      throw ApiException(
+        message:
+            fallbackMessage != null && fallbackMessage.isNotEmpty
+                ? fallbackMessage
+                : '회원 탈퇴에 실패했어요.',
+        statusCode: fallbackResponse.statusCode,
+      );
     } catch (e) {
+      if (e is ApiException) rethrow;
       throw ApiException.fromDioError(e);
     }
   }
@@ -271,8 +390,8 @@ class AuthService {
     return _jwtPreferredNumericUserId(t);
   }
 
-  /// 내 가구 그룹명 변경 (`PATCH /households`, `{ name }`)
-  Future<HouseholdResponseModel> updateHouseholdName({
+  /// 내 가구 그룹명 변경 (`PATCH /households/name`, `{ name }`)
+  Future<void> updateHouseholdName({
     required String name,
   }) async {
     final trimmed = name.trim();
@@ -281,40 +400,52 @@ class AuthService {
     }
     try {
       final response = await _apiClient.patch(
-        AppConfig.householdsEndpoint,
+        AppConfig.householdsNameEndpoint,
         data: {'name': trimmed},
       );
       final data = response.data;
       if (data is! Map<String, dynamic>) {
         throw ApiException(message: '그룹명 변경 응답 형식이 올바르지 않습니다.');
       }
-      final model = HouseholdResponseModel.fromJson(data);
-      if (!model.isSuccess) {
+      if (data['isSuccess'] == false) {
+        final message = (data['message'] as String?)?.trim();
         throw ApiException(
-          message: model.message.isNotEmpty
-              ? model.message
-              : '그룹명을 변경하지 못했습니다.',
+          message:
+              message != null && message.isNotEmpty
+                  ? message
+                  : '그룹명을 변경하지 못했습니다.',
+          statusCode: response.statusCode,
         );
       }
-      return model;
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException.fromDioError(e);
     }
   }
 
-  /// 그룹장을 다른 멤버에게 위임 (그룹장만). `POST /households/leader-transfer`
+  /// 그룹장을 다른 멤버에게 위임 (그룹장만). `PATCH /households/leader`
   Future<void> transferHouseholdLeadership({
-    required int newLeaderUserId,
+    required int targetUserId,
   }) async {
-    if (newLeaderUserId <= 0) {
+    if (targetUserId <= 0) {
       throw ApiException(message: '유효한 그룹원을 선택해주세요.');
     }
     try {
-      await _apiClient.post(
-        AppConfig.householdsLeaderTransferEndpoint,
-        data: {'newLeaderUserId': newLeaderUserId},
+      final response = await _apiClient.patch(
+        AppConfig.householdsLeaderEndpoint,
+        data: {'targetUserId': targetUserId},
       );
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['isSuccess'] == false) {
+        final message = (data['message'] as String?)?.trim();
+        throw ApiException(
+          message:
+              message != null && message.isNotEmpty
+                  ? message
+                  : '그룹 리더 위임에 실패했어요.',
+          statusCode: response.statusCode,
+        );
+      }
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException.fromDioError(e);
@@ -322,11 +453,12 @@ class AuthService {
   }
 
   /// 현재 로그인한 사용자의 그룹(가구) 정보를 서버에서 조회합니다.
+  /// `GET /households/me`
   /// 그룹에 속하지 않았거나 요청 실패 시 null 반환.
   Future<HouseholdResponseModel?> fetchMyHousehold() async {
     try {
       final response = await _apiClient.get(
-        AppConfig.householdsEndpoint,
+        AppConfig.householdsMeEndpoint,
         options: Options(
           validateStatus: (status) =>
               status != null && (status == 200 || status == 404 || status == 400),
@@ -342,9 +474,11 @@ class AuthService {
     }
   }
 
-  /// 그룹 멤버 목록 (정산 API `memberIds` 연동).
+  /// 그룹 멤버 목록 (설정/정산 API `memberIds` 연동).
   ///
-  /// API 형식: `{ isSuccess, result: [ { userId, name } ] }` 또는 `result.members` 등.
+  /// API 형식:
+  /// `{ isSuccess, result: [ { userId, name, profileImage, role } ] }`
+  /// 또는 `result.members` 등.
   Future<List<HouseholdMemberBrief>> fetchHouseholdMembers() async {
     try {
       // 배포 서버에 경로가 없을 때 404가 나와도 예외·인터셉터 에러 로그를 줄이기 위해 허용
@@ -385,7 +519,14 @@ class AuthService {
           final id = _parseHouseholdMemberUserId(e);
           final name = _parseHouseholdMemberDisplayName(e);
           if (id != null && id > 0 && name != null) {
-            out.add(HouseholdMemberBrief(userId: id, name: name));
+            out.add(
+              HouseholdMemberBrief(
+                userId: id,
+                name: name,
+                profileImage: _parseHouseholdMemberProfileImage(e),
+                role: _parseHouseholdMemberRole(e),
+              ),
+            );
           }
         }
       }
@@ -407,8 +548,15 @@ class AuthService {
     final name = u?.name?.trim().isNotEmpty == true
         ? u!.name!.trim()
         : (await StorageService.getUserName())?.trim() ?? '나';
+    final role = StorageService.getUserRole();
     if (uid != null && uid > 0) {
-      return [HouseholdMemberBrief(userId: uid, name: name)];
+      return [
+        HouseholdMemberBrief(
+          userId: uid,
+          name: name,
+          role: role,
+        ),
+      ];
     }
     return [];
   }

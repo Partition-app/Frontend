@@ -18,8 +18,17 @@ class HouseholdResponseModel {
     this.error,
   });
 
-  factory HouseholdResponseModel.fromJson(Map<String, dynamic> json) =>
-      _$HouseholdResponseModelFromJson(json);
+  factory HouseholdResponseModel.fromJson(Map<String, dynamic> json) {
+    return HouseholdResponseModel(
+      isSuccess: json['isSuccess'] == true,
+      code: (json['code'] as String?) ?? '',
+      message: (json['message'] as String?) ?? '',
+      result: json['result'] is Map<String, dynamic>
+          ? HouseholdResult.fromJson(json['result'] as Map<String, dynamic>)
+          : null,
+      error: json['error'] as String?,
+    );
+  }
 
   Map<String, dynamic> toJson() => _$HouseholdResponseModelToJson(this);
 }
@@ -38,8 +47,46 @@ class HouseholdResult {
     this.role,
   });
 
-  factory HouseholdResult.fromJson(Map<String, dynamic> json) =>
-      _$HouseholdResultFromJson(json);
+  factory HouseholdResult.fromJson(Map<String, dynamic> json) {
+    final rawIsLeader = json['isLeader'];
+    final bool? isLeader = rawIsLeader is bool
+        ? rawIsLeader
+        : (rawIsLeader is String
+              ? rawIsLeader.toLowerCase() == 'true'
+              : null);
+
+    String? readString(List<String> keys) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value == null) continue;
+        final text = value.toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      return null;
+    }
+
+    int? readInt(List<String> keys) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value == null) continue;
+        if (value is int) return value;
+        if (value is num) return value.toInt();
+        final parsed = int.tryParse(value.toString().trim());
+        if (parsed != null) return parsed;
+      }
+      return null;
+    }
+
+    final parsedRole = readString(['role']) ??
+        (isLeader == null ? null : (isLeader ? 'LEADER' : 'MEMBER'));
+
+    return HouseholdResult(
+      code: readString(['code', 'inviteCode', 'householdCode']),
+      name: readString(['name', 'householdName']),
+      id: readInt(['id', 'householdId']),
+      role: parsedRole,
+    );
+  }
 
   Map<String, dynamic> toJson() => _$HouseholdResultToJson(this);
 }

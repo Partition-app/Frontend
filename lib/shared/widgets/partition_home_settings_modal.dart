@@ -95,59 +95,81 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
     required String title,
     required String message,
     required String confirmLabel,
+    bool destructive = false,
   }) async {
     final ok = await showDialog<bool>(
       context: ctx,
       barrierColor: Colors.black.withOpacity(0.55),
       builder: (c) => PartitionGlassDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
         constraints: const BoxConstraints(maxWidth: 360),
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        borderRadius: BorderRadius.circular(24),
+        blurSigma: 18,
+        fillColor: const Color.fromRGBO(255, 255, 255, 0.12),
+        borderColor: const Color.fromRGBO(255, 255, 255, 0.22),
+        gradient: const LinearGradient(
+          colors: [Colors.transparent, Colors.transparent],
+        ),
+        boxShadow: const [],
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 17,
-                fontFamily: 'Pretendard Variable',
-              ),
+            Row(
+              children: [
+                const SizedBox(width: 40),
+                Expanded(
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '닫기',
+                  onPressed: () => Navigator.of(c).pop(false),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: Colors.white.withOpacity(0.88),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
             Text(
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.85),
+                color: Colors.white.withOpacity(0.82),
+                fontSize: 14,
                 height: 1.45,
                 fontFamily: 'Pretendard Variable',
               ),
             ),
+            const SizedBox(height: 20),
+            _confirmDialogButton(
+              label: '취소',
+              foregroundColor: PartitionUiTokens.actionText,
+              onTap: () => Navigator.of(c).pop(false),
+            ),
             const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(c).pop(false),
-                  child: Text(
-                    '취소',
-                    style: TextStyle(color: Colors.white.withOpacity(0.55)),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(c).pop(true),
-                  child: Text(
-                    confirmLabel,
-                    style: const TextStyle(
-                      color: Color(0xFF6BA3FF),
-                      fontFamily: 'Pretendard Variable',
-                    ),
-                  ),
-                ),
-              ],
+            _confirmDialogButton(
+              label: confirmLabel,
+              foregroundColor: destructive
+                  ? _destructiveMuted
+                  : PartitionUiTokens.actionText,
+              onTap: () => Navigator.of(c).pop(true),
             ),
           ],
         ),
@@ -183,7 +205,8 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
             title: '그룹 나가기',
             message:
                 '이 파티션 그룹에서 나가요. 같은 그룹에 다시 들어오려면 그룹 코드가 필요합니다.',
-            confirmLabel: '나가기');
+            confirmLabel: '나가기',
+            destructive: true);
     if (!ok || !mounted) return;
 
     try {
@@ -208,7 +231,8 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
         await _confirm(ctx,
             title: '회원 탈퇴',
             message: '계정과 연결된 정보가 삭제될 수 있어요.\n계속 진행할까요?',
-            confirmLabel: '탈퇴');
+            confirmLabel: '탈퇴',
+            destructive: true);
     if (!ok || !mounted) return;
 
     try {
@@ -255,6 +279,44 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
               label,
               style: const TextStyle(
                 color: _destructiveMuted,
+                fontSize: PartitionUiTokens.actionFontSize,
+                fontWeight: PartitionUiTokens.actionWeight,
+                fontFamily: 'Pretendard Variable',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _confirmDialogButton({
+    required String label,
+    required Color foregroundColor,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: PartitionUiTokens.actionButtonHeight,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius:
+              BorderRadius.circular(PartitionUiTokens.actionButtonRadius),
+          onTap: onTap,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(
+                PartitionUiTokens.actionButtonRadius,
+              ),
+              border: Border.all(color: Colors.white.withOpacity(0.18)),
+              color: Colors.white.withOpacity(0.05),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: foregroundColor,
                 fontSize: PartitionUiTokens.actionFontSize,
                 fontWeight: PartitionUiTokens.actionWeight,
                 fontFamily: 'Pretendard Variable',
@@ -378,7 +440,7 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
     if (!ok || !mounted) return;
 
     try {
-      await _authService.transferHouseholdLeadership(newLeaderUserId: pickedId);
+      await _authService.transferHouseholdLeadership(targetUserId: pickedId);
       await _loadHousehold();
       if (!ctx.mounted) return;
       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -770,7 +832,7 @@ class _RenameHouseholdNameDialogState extends State<_RenameHouseholdNameDialog> 
               focusedBorder: OutlineInputBorder(
                 borderRadius:
                     BorderRadius.circular(PartitionUiTokens.fieldRadius),
-                borderSide: const BorderSide(color: Color(0xFF6BA3FF)),
+                borderSide: const BorderSide(color: HomeShareStyle.point),
               ),
               counterStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
             ),
@@ -792,7 +854,7 @@ class _RenameHouseholdNameDialogState extends State<_RenameHouseholdNameDialog> 
                 child: const Text(
                   '저장',
                   style: TextStyle(
-                    color: Color(0xFF6BA3FF),
+                    color: HomeShareStyle.point,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -921,14 +983,40 @@ class _PickNewLeaderDialogState extends State<_PickNewLeaderDialog> {
                               ),
                               itemBuilder: (context, i) {
                                 final m = _candidates[i];
+                                final roleLabel = m.role == 'LEADER' ? '리더' : '멤버';
+                                final initial = m.name.isNotEmpty ? m.name.characters.first : '?';
                                 return ListTile(
                                   contentPadding: EdgeInsets.zero,
+                                  leading: CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: Colors.white.withOpacity(0.08),
+                                    foregroundImage: m.profileImage != null
+                                        ? NetworkImage(m.profileImage!)
+                                        : null,
+                                    child: Text(
+                                      initial,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        fontFamily: 'Pretendard Variable',
+                                      ),
+                                    ),
+                                  ),
                                   title: Text(
                                     m.name,
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
+                                      fontFamily: 'Pretendard Variable',
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    roleLabel,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.48),
+                                      fontSize: 12,
                                       fontFamily: 'Pretendard Variable',
                                     ),
                                   ),

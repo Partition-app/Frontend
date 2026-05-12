@@ -1831,9 +1831,10 @@ class _PartitionSharedExpenseScreenState
     final lastHeaderLabel = isUtility ? '비고' : '수량';
     final dateHeaderLabel = isUtility ? '납부일' : '날짜';
     final amountHeaderLabel = isUtility ? '납부액' : '금액';
-    // 공과금: 항목명 짧음·비고 넓음. 물품: 내용 폭 축소·날짜(YY.MM.DD.) 폭 확대
-    const contentFlex = 4;
-    final dateFlex = isUtility ? 2 : 3;
+    // 공과금: 납부일 가독성을 위해 내용 폭을 줄이고 날짜 폭을 늘림.
+    // 물품은 기존 비율 유지.
+    final contentFlex = isUtility ? 3 : 4;
+    final dateFlex = isUtility ? 3 : 3;
     final lastColFlex = isUtility ? 3 : 2;
 
     // 내용 : 날짜 : 금액 : 마지막열
@@ -1865,8 +1866,18 @@ class _PartitionSharedExpenseScreenState
               // 표 제목 캡슐만 좌우 1px씩 좁게 (데이터 행과 동일 레이아웃 유지)
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: FrostedPanel(
-                borderRadius: BorderRadius.circular(20),
-                backgroundOpacity: 0.4,
+                borderRadius: BorderRadius.circular(18),
+                backgroundOpacity: 0.08,
+                borderColor: const Color.fromRGBO(255, 255, 255, 0.12),
+                strokeGradient: const RadialGradient(
+                  center: Alignment(0.1, -0.8),
+                  radius: 2.2,
+                  colors: [
+                    Color.fromRGBO(255, 255, 255, 0.11),
+                    Color.fromRGBO(255, 255, 255, 0.01),
+                  ],
+                  stops: [0.0, 1.0],
+                ),
                 padding: const EdgeInsets.symmetric(
                     horizontal: padContent, vertical: 6),
                 child: const Padding(
@@ -1888,8 +1899,18 @@ class _PartitionSharedExpenseScreenState
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: FrostedPanel(
-                borderRadius: BorderRadius.circular(20),
-                backgroundOpacity: 0.4,
+                borderRadius: BorderRadius.circular(18),
+                backgroundOpacity: 0.08,
+                borderColor: const Color.fromRGBO(255, 255, 255, 0.12),
+                strokeGradient: const RadialGradient(
+                  center: Alignment(0.1, -0.8),
+                  radius: 2.2,
+                  colors: [
+                    Color.fromRGBO(255, 255, 255, 0.11),
+                    Color.fromRGBO(255, 255, 255, 0.01),
+                  ],
+                  stops: [0.0, 1.0],
+                ),
                 padding: const EdgeInsets.symmetric(
                     horizontal: padDate, vertical: 6),
                 child: Padding(
@@ -1911,8 +1932,18 @@ class _PartitionSharedExpenseScreenState
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: FrostedPanel(
-                borderRadius: BorderRadius.circular(20),
-                backgroundOpacity: 0.4,
+                borderRadius: BorderRadius.circular(18),
+                backgroundOpacity: 0.08,
+                borderColor: const Color.fromRGBO(255, 255, 255, 0.12),
+                strokeGradient: const RadialGradient(
+                  center: Alignment(0.1, -0.8),
+                  radius: 2.2,
+                  colors: [
+                    Color.fromRGBO(255, 255, 255, 0.11),
+                    Color.fromRGBO(255, 255, 255, 0.01),
+                  ],
+                  stops: [0.0, 1.0],
+                ),
                 padding: const EdgeInsets.symmetric(
                     horizontal: padAmount, vertical: 6),
                 child: Padding(
@@ -1934,8 +1965,18 @@ class _PartitionSharedExpenseScreenState
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: FrostedPanel(
-                borderRadius: BorderRadius.circular(20),
-                backgroundOpacity: 0.4,
+                borderRadius: BorderRadius.circular(18),
+                backgroundOpacity: 0.08,
+                borderColor: const Color.fromRGBO(255, 255, 255, 0.12),
+                strokeGradient: const RadialGradient(
+                  center: Alignment(0.1, -0.8),
+                  radius: 2.2,
+                  colors: [
+                    Color.fromRGBO(255, 255, 255, 0.11),
+                    Color.fromRGBO(255, 255, 255, 0.01),
+                  ],
+                  stops: [0.0, 1.0],
+                ),
                 padding:
                     const EdgeInsets.symmetric(horizontal: padQty, vertical: 6),
                 child: Padding(
@@ -2623,8 +2664,8 @@ class _SharedExpenseTableBody extends StatelessWidget {
     const padDate = 3.0;
     const padAmount = 3.0;
     const padQty = 3.0;
-    const contentFlex = 4;
-    final dateFlex = isUtility ? 2 : 3;
+    final contentFlex = isUtility ? 3 : 4;
+    final dateFlex = isUtility ? 3 : 3;
     final lastColFlex = isUtility ? 3 : 2;
 
     /// 물품 품목명: 6자 초과 시 앞 6자 + … (공과금은 전체 표시용 FittedBox)
