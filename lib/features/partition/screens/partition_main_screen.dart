@@ -22,6 +22,7 @@ import 'package:partition_app/features/partition/screens/partition_board_screen.
 import 'package:partition_app/features/partition/screens/partition_insight_result_screen.dart';
 import 'package:partition_app/features/partition/services/insights_query_service.dart';
 import 'package:partition_app/features/partition/providers/home_share_provider.dart';
+import 'package:partition_app/features/partition/theme/home_share_style.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 
 /// 파티션 메인 화면 - 4개의 탭으로 구성
@@ -881,13 +882,13 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
         decoration: BoxDecoration(
           color: _alarmMarkReadBusy.contains(item.alarmId)
               ? Colors.white.withOpacity(0.35)
-              : const Color(0xFF6BA3FF),
+              : HomeShareStyle.point,
           shape: BoxShape.circle,
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color.fromRGBO(107, 163, 255, 0.35),
+              color: HomeShareStyle.point.withOpacity(0.45),
               blurRadius: 10,
-              offset: Offset(0, 0),
+              offset: const Offset(0, 0),
             ),
           ],
         ),

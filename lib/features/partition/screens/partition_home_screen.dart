@@ -1134,39 +1134,66 @@ class _HomeLocationChangeDialogState extends State<_HomeLocationChangeDialog> {
                           // 현재 위치로 설정 버튼
                           SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed:
-                                  _locationLoading ? null : _onUseCurrentLocation,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: HomeShareStyle.point,
-                                foregroundColor: HomeShareStyle.main,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 13),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    PartitionUiTokens.actionButtonRadius,
-                                  ),
+                            height: PartitionUiTokens.actionButtonHeight,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _locationLoading
+                                    ? null
+                                    : _onUseCurrentLocation,
+                                borderRadius: BorderRadius.circular(
+                                  PartitionUiTokens.actionButtonRadius,
                                 ),
-                                elevation: 0,
-                              ),
-                              icon: _locationLoading
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: HomeShareStyle.main),
-                                    )
-                                  : const Icon(Icons.my_location_rounded,
-                                      size: 16),
-                              label: Text(
-                                _locationLoading
-                                    ? '위치 가져오는 중...'
-                                    : '현재 위치로 설정',
-                                style: const TextStyle(
-                                  fontSize: PartitionUiTokens.actionFontSize,
-                                  fontWeight: PartitionUiTokens.actionWeight,
-                                  decoration: TextDecoration.none,
+                                child: Opacity(
+                                  opacity: _locationLoading ? 0.55 : 1.0,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(
+                                        PartitionUiTokens.actionButtonRadius,
+                                      ),
+                                      border: Border.all(
+                                        color:
+                                            PartitionUiTokens.actionButtonBorder,
+                                      ),
+                                      color: PartitionUiTokens.actionButtonFill,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        if (_locationLoading)
+                                          const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        else
+                                          const Icon(
+                                            Icons.my_location_rounded,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _locationLoading
+                                              ? '위치 가져오는 중...'
+                                              : '현재 위치로 설정',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize:
+                                                PartitionUiTokens.actionFontSize,
+                                            fontWeight:
+                                                PartitionUiTokens.actionWeight,
+                                            decoration: TextDecoration.none,
+                                            fontFamily: 'Pretendard Variable',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

@@ -12,6 +12,7 @@ import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/utils/partition_dummy_data_policy.dart';
+import 'package:partition_app/features/partition/theme/home_share_style.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 
 const _kChoreTaskNames = ['설거지', '빨래', '청소', '분리수거'];
@@ -682,7 +683,9 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
                     Text(
                       _monthNames[monthIndex],
                       style: TextStyle(
-                        color: Colors.white,
+                        color: isSelected
+                            ? HomeShareStyle.point
+                            : Colors.white,
                         fontSize: 14,
                         fontWeight:
                             isSelected ? FontWeight.bold : FontWeight.normal,
@@ -693,7 +696,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
                         margin: const EdgeInsets.only(top: 4),
                         height: 2,
                         width: 30,
-                        color: Colors.white,
+                        color: HomeShareStyle.point,
                       ),
                   ],
                 ),
