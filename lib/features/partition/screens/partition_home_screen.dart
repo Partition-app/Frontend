@@ -661,7 +661,7 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              '집 근처에 들어오면 룸메이트에게 알림을 보낼 수 있어요',
+              '집 근처에 있을 때 룸메이트에게 알림을 보낼 수 있어요.',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.88),
                 fontSize: 13,
@@ -673,7 +673,7 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
             ),
             const SizedBox(height: 18),
             Text(
-              '귀가 공유 기능을 사용하려면 집 위치를 먼저 등록해야 해요.\n\n'
+              '기능을 사용하려면 집 위치를 먼저 등록해야 해요.\n\n'
               '집 반경 300m 안에 들어오면 룸메이트에게\n'
               '조용한 알림이 전송됩니다.',
               style: TextStyle(
