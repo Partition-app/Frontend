@@ -24,6 +24,7 @@ class PartitionHomeScreen extends StatefulWidget {
 }
 
 class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
+  static const double _contentTopOffset = 10.0;
   /// [PartitionSharedExpenseScreen] 등과 동일 — 하단 글래스 탭바·노치와 겹침 방지
   static const double _contentPaddingBottom = 16.0;
   static const double _scrollBottomInsetForTabBar = 147.0;
@@ -244,7 +245,7 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           16,
-          0,
+          _contentTopOffset,
           16,
           scrollBottomPadding,
         ),
