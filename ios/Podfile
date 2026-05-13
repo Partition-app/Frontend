@@ -44,6 +44,8 @@ post_install do |installer|
         '$(inherited)',
         # permission_handler — 마이크 (음성 질문 녹음)
         'PERMISSION_MICROPHONE=1',
+        # permission_handler — 위치 (귀가 공유·설정 열기)
+        'PERMISSION_LOCATION=1',
       ]
     end
   end

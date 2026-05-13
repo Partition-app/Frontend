@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
+import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_button.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/models/preference_response_model.dart';
@@ -271,26 +272,36 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    '나중에도 추가할 수 있어요.',
+                    style: TextStyle(
+                      color: Color.fromRGBO(255, 255, 255, 0.72),
+                      fontSize: 13,
+                      fontFamily: 'Pretendard Variable',
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   // Q1 헤더
                   Text(
                     'Q1',
                     style: TextStyle(
                       color: const Color(0xFFFFFFFF),
-                      fontSize: 14,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Pretendard Variable',
                       height: 1.0,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     '각 집안일에 대한 선호도를 입력해주세요.',
                     style: TextStyle(
                       color: const Color(0xFFFFFFFF),
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Pretendard Variable',
-                      height: 1.0,
+                      height: 1.35,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -305,30 +316,21 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
                     'Q2',
                     style: TextStyle(
                       color: const Color(0xFFFFFFFF),
-                      fontSize: 14,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Pretendard Variable',
                       height: 1.0,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     '룸메이트와 공유하는 공동물품을 선택해주세요.',
                     style: TextStyle(
                       color: const Color(0xFFFFFFFF),
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                       fontFamily: 'Pretendard Variable',
-                      height: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    ' 나중에도 추가할 수 있어요.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      height: 1.4,
+                      height: 1.35,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -339,12 +341,14 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
                       )),
                   const SizedBox(height: 24),
                   // 다음으로 버튼
-                  Center(
+                  SizedBox(
+                    width: double.infinity,
+                    height: PartitionUiTokens.actionButtonHeight,
                     child: GlassmorphismButton(
                       text: '다음으로',
                       onTap: _handleNext,
-                      width: 183,
-                      height: 31,
+                      width: screenWidth * 0.9 - 40,
+                      height: PartitionUiTokens.actionButtonHeight,
                     ),
                   ),
                 ],
@@ -356,12 +360,14 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
     );
   }
 
+  static const double _choreRowHeight = 41; // 기존 31px의 약 1.3배
+
   Widget _buildChoreRow(String chore) {
     final currentScore = _preferences[chore] ?? 0;
 
     return Container(
-      height: 31,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      height: _choreRowHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
@@ -405,18 +411,9 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              // 선호도 선택 (1-5점)
-              Row(
-                children: List.generate(5, (index) {
-                  final score = index + 1;
-                  final isSelected = currentScore >= score;
-
-                  return _PreferenceCircle(
-                    isSelected: isSelected,
-                    onTap: () => _updatePreference(chore, score),
-                    margin: EdgeInsets.only(left: index == 0 ? 0 : 4),
-                  );
-                }),
+              _PreferenceSelector(
+                currentScore: currentScore,
+                onScoreChanged: (score) => _updatePreference(chore, score),
               ),
             ],
           ),
@@ -489,16 +486,76 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
   }
 }
 
+/// 선호도 1~5점 — 탭·가로 드래그 모두 지원
+class _PreferenceSelector extends StatelessWidget {
+  final int currentScore;
+  final ValueChanged<int> onScoreChanged;
+
+  static const double circleSize = 16.8; // 기존 14px의 1.2배
+  static const double circleSpacing = 5;
+
+  const _PreferenceSelector({
+    required this.currentScore,
+    required this.onScoreChanged,
+  });
+
+  int _scoreFromLocalX(double localX) {
+    final step = circleSize + circleSpacing;
+    final firstCenter = circleSize / 2;
+    final lastCenter = firstCenter + step * 4;
+    final clampedX = localX.clamp(firstCenter, lastCenter);
+    final index = ((clampedX - firstCenter) / step).round();
+    return (index + 1).clamp(1, 5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const totalWidth = circleSize * 5 + circleSpacing * 4;
+
+    return SizedBox(
+      width: totalWidth,
+      height: circleSize + 8,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (details) {
+          onScoreChanged(_scoreFromLocalX(details.localPosition.dx));
+        },
+        onHorizontalDragUpdate: (details) {
+          final box = context.findRenderObject() as RenderBox?;
+          if (box == null) return;
+          final localX = box.globalToLocal(details.globalPosition).dx;
+          onScoreChanged(_scoreFromLocalX(localX));
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(5, (index) {
+            final score = index + 1;
+            final isSelected = currentScore >= score;
+            return _PreferenceCircle(
+              isSelected: isSelected,
+              size: circleSize,
+              onTap: () => onScoreChanged(score),
+              margin: EdgeInsets.only(left: index == 0 ? 0 : circleSpacing),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
 // 선호도 선택 동그라미 위젯 (클릭 효과 포함)
 class _PreferenceCircle extends StatefulWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final EdgeInsets margin;
+  final double size;
 
   const _PreferenceCircle({
     required this.isSelected,
     required this.onTap,
     required this.margin,
+    this.size = 16.8,
   });
 
   @override
@@ -530,8 +587,8 @@ class _PreferenceCircleState extends State<_PreferenceCircle> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeInOut,
-        width: 14,
-        height: 14,
+        width: widget.size,
+        height: widget.size,
         margin: widget.margin,
         transform: Matrix4.identity()..scale(_isPressed ? 0.85 : 1.0),
         decoration: BoxDecoration(
@@ -606,9 +663,12 @@ class _SharedItemButtonState extends State<_SharedItemButton> {
         transform: Matrix4.identity()..scale(_isPressed ? 0.95 : 1.0),
         child: IntrinsicWidth(
           child: Container(
+            constraints: BoxConstraints(
+              minWidth: widget.item.characters.length <= 2 ? 48 : 0,
+            ),
             padding: const EdgeInsets.symmetric(
-              horizontal: 10.038,
-              vertical: 5.019,
+              horizontal: 16,
+              vertical: 8,
             ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(31.369),
@@ -647,10 +707,12 @@ class _SharedItemButtonState extends State<_SharedItemButton> {
                   padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
                   child: Text(
                     widget.item,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.normal,
+                      height: 1.2,
                     ),
                   ),
                 ),

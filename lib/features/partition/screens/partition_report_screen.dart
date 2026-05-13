@@ -1586,41 +1586,7 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
     required List<String> headers,
     required List<int> flexes,
   }) {
-    return SizedBox(
-      height: 34,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          for (var i = 0; i < headers.length; i++) ...[
-            if (i > 0) const SizedBox(width: 3),
-            Expanded(
-              flex: flexes[i],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: FrostedPanel(
-                  borderRadius: BorderRadius.circular(20),
-                  backgroundOpacity: 0.4,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Center(
-                      child: Text(
-                        headers[i],
-                        style: _th,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
+    return _buildTableHeaderRow(headers: headers, flexes: flexes);
   }
 
   Widget _buildSettlementRow(
@@ -1810,7 +1776,7 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
     color: Colors.white,
     fontWeight: FontWeight.w800,
     fontSize: 12,
-    height: 1.3,
+    height: 1.35,
     fontFamily: 'Pretendard Variable',
   );
 
@@ -1822,6 +1788,71 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
     fontFamily: 'Pretendard Variable',
   );
 
+  /// 공용소비·예약 보드 표 헤더와 동일한 글래스 캡슐 (opacity 0.08)
+  static const _tableHeaderStrokeGradient = RadialGradient(
+    center: Alignment(0.1, -0.8),
+    radius: 2.2,
+    colors: [
+      Color.fromRGBO(255, 255, 255, 0.11),
+      Color.fromRGBO(255, 255, 255, 0.01),
+    ],
+    stops: [0.0, 1.0],
+  );
+
+  static const Color _tableHeaderBorderColor =
+      Color.fromRGBO(255, 255, 255, 0.12);
+
+  static const double _tableHeaderRowHeight = 34;
+
+  Widget _tableHeaderCapsule(String label, {double horizontalPad = 4}) {
+    return FrostedPanel(
+      borderRadius: BorderRadius.circular(18),
+      backgroundOpacity: 0.08,
+      borderColor: _tableHeaderBorderColor,
+      strokeGradient: _tableHeaderStrokeGradient,
+      padding: EdgeInsets.symmetric(horizontal: horizontalPad, vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: _th,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableHeaderRow({
+    required List<String> headers,
+    required List<int> flexes,
+  }) {
+    return SizedBox(
+      height: _tableHeaderRowHeight,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var i = 0; i < headers.length; i++) ...[
+            if (i > 0) const SizedBox(width: 3),
+            Expanded(
+              flex: flexes[i],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: _tableHeaderCapsule(headers[i]),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _simpleTable({
     required List<String> headers,
     required List<int> flexes,
@@ -1830,35 +1861,8 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 32,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              for (var i = 0; i < headers.length; i++) ...[
-                if (i > 0) const SizedBox(width: 4),
-                Expanded(
-                  flex: flexes[i],
-                  child: FrostedPanel(
-                    borderRadius: BorderRadius.circular(20),
-                    backgroundOpacity: 0.35,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                    child: Center(
-                      child: Text(
-                        headers[i],
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        style: _th,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
+        _buildTableHeaderRow(headers: headers, flexes: flexes),
+        const SizedBox(height: 8),
         for (final r in rows)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
@@ -1866,16 +1870,21 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 for (var i = 0; i < r.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 4),
+                  if (i > 0) const SizedBox(width: 3),
                   Expanded(
                     flex: flexes[i],
-                    child: Center(
-                      child: Text(
-                        r[i],
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: _td,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Center(
+                        child: Text(
+                          r[i],
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: i == 0
+                              ? _td.copyWith(fontWeight: FontWeight.w700)
+                              : _td,
+                        ),
                       ),
                     ),
                   ),

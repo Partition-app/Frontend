@@ -307,15 +307,8 @@ class _PartitionSharedExpenseScreenState
     return showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.56),
-      builder: (ctx) => PartitionGlassDialog(
+      builder: (ctx) => PartitionGlassDialog.modal(
         constraints: const BoxConstraints(maxWidth: 360),
-        borderRadius: BorderRadius.circular(24),
-        blurSigma: 18,
-        borderColor: Colors.white.withOpacity(0.22),
-        gradient: const LinearGradient(
-          colors: [Colors.transparent, Colors.transparent],
-        ),
-        boxShadow: const [],
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -900,10 +893,8 @@ class _PartitionSharedExpenseScreenState
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (dialogCtx) => _SharedGlassDialogShell(
         constraints: const BoxConstraints(maxWidth: 340),
-        useSettingsModalStyle: true,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-          child: Column(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -980,7 +971,6 @@ class _PartitionSharedExpenseScreenState
               ),
             ],
           ),
-        ),
       ),
     );
   }
@@ -2921,53 +2911,23 @@ List<List<SharedExpenseTableItem>> _paginateSharedExpenseItems(
   return pages;
 }
 
-/// 추가/확인/AI 모달에서 재사용하는 글래스 다이얼로그 프레임
+/// 추가/확인/정산 요청 등 공용소비 모달 공통 글래스 프레임 (예약하기·날짜 피커와 동일 톤)
 class _SharedGlassDialogShell extends StatelessWidget {
   final Widget child;
   final BoxConstraints constraints;
-  final bool useSettingsModalStyle;
+  final EdgeInsetsGeometry? padding;
 
   const _SharedGlassDialogShell({
     required this.child,
     required this.constraints,
-    this.useSettingsModalStyle = false,
+    this.padding,
   });
 
   @override
   Widget build(BuildContext context) {
-    return PartitionGlassDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+    return PartitionGlassDialog.modal(
       constraints: constraints,
-      borderRadius: BorderRadius.circular(useSettingsModalStyle ? 24 : 20),
-      blurSigma: useSettingsModalStyle ? 18 : 10,
-      fillColor: useSettingsModalStyle
-          ? const Color.fromRGBO(255, 255, 255, 0.12)
-          : Colors.transparent,
-      borderColor: useSettingsModalStyle
-          ? Colors.white.withOpacity(0.22)
-          : const Color.fromRGBO(255, 255, 255, 0.5),
-      gradient: useSettingsModalStyle
-          ? const LinearGradient(
-              colors: [Colors.transparent, Colors.transparent],
-            )
-          : const RadialGradient(
-              center: Alignment(-0.1212, -0.1178),
-              radius: 1.7145,
-              colors: [
-                Color.fromRGBO(255, 255, 255, 0.10),
-                Color.fromRGBO(255, 255, 255, 0.15),
-              ],
-              stops: [0.0, 1.0],
-            ),
-      boxShadow: useSettingsModalStyle
-          ? const []
-          : const [
-              BoxShadow(
-                color: Color.fromRGBO(255, 255, 255, 0.25),
-                offset: Offset(4, 4),
-                blurRadius: 30,
-              ),
-            ],
+      padding: padding,
       child: child,
     );
   }
@@ -5579,7 +5539,6 @@ class _AiReceiptRecognitionFlowDialogState
     if (_step == 2) {
       return _SharedGlassDialogShell(
         constraints: BoxConstraints(maxWidth: sw - 32, maxHeight: maxH),
-        useSettingsModalStyle: true,
         child: SizedBox(
           height: maxH,
           child: _buildStepExtract(context),
@@ -5589,7 +5548,6 @@ class _AiReceiptRecognitionFlowDialogState
 
     return _SharedGlassDialogShell(
       constraints: BoxConstraints(maxWidth: sw - 32, maxHeight: maxH),
-      useSettingsModalStyle: true,
       child:
           _step == 0 ? _buildStepCapture(context) : _buildStepAnalyze(context),
     );
@@ -6248,15 +6206,8 @@ class _ReceiptExtractDatePickerDialogState
     final screen = MediaQuery.sizeOf(context);
     final dialogW = (screen.width - 48).clamp(300.0, 360.0);
 
-    return PartitionGlassDialog(
+    return PartitionGlassDialog.modal(
       constraints: BoxConstraints.tightFor(width: dialogW),
-      borderRadius: BorderRadius.circular(24),
-      blurSigma: 18,
-      borderColor: Colors.white.withOpacity(0.22),
-      gradient: const LinearGradient(
-        colors: [Colors.transparent, Colors.transparent],
-      ),
-      boxShadow: const [],
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,

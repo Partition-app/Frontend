@@ -9,6 +9,7 @@ import 'package:partition_app/features/partition/services/reservation_items_serv
 import 'package:partition_app/features/partition/services/reservations_service.dart';
 import 'package:partition_app/shared/widgets/frosted_panel.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_date_picker.dart';
+import 'package:partition_app/shared/widgets/glassmorphic_time_picker.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/primary_button.dart';
 import 'package:partition_app/shared/utils/partition_dummy_data_policy.dart';
@@ -181,12 +182,12 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     }).toList();
   }
 
-  /// 진행 중 예약의 종료 열: `N분 후 종료` / `N시간 N분 후 종료` / `N일 N시간 N분 후 종료`
+  /// 진행 중 예약의 종료 열: `N분 후` / `N시간 N분 후` / `N일 N시간 N분 후`
   String _formatCountdownToEnd(DateTime slotEnd, DateTime now) {
     var diff = slotEnd.difference(now);
     if (diff.inSeconds <= 0) return '';
     if (diff.inSeconds < 60) {
-      return '1분 미만 후 종료';
+      return '1분 미만 후';
     }
     final days = diff.inDays;
     diff -= Duration(days: days);
@@ -194,12 +195,12 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     diff -= Duration(hours: hours);
     final minutes = diff.inMinutes;
     if (days > 0) {
-      return '${days}일 ${hours}시간 ${minutes}분 후 종료';
+      return '${days}일 ${hours}시간 ${minutes}분 후';
     }
     if (hours > 0) {
-      return '${hours}시간 ${minutes}분 후 종료';
+      return '${hours}시간 ${minutes}분 후';
     }
-    return '${minutes}분 후 종료';
+    return '${minutes}분 후';
   }
 
   String _displayEndColumn(_BoardReservationRow r) {
@@ -1531,25 +1532,27 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     );
     if (!mounted || date == null) return null;
 
-    final tod = await showTimePicker(
+    final selectedDay = DateTime(date.year, date.month, date.day);
+    final floorDay = DateTime(floor.year, floor.month, floor.day);
+    final ceilingDay = DateTime(ceiling.year, ceiling.month, ceiling.day);
+    TimeOfDay? minTime;
+    TimeOfDay? maxTime;
+    if (selectedDay == floorDay) {
+      minTime = TimeOfDay(hour: floor.hour, minute: floor.minute);
+    }
+    if (selectedDay == ceilingDay) {
+      maxTime = TimeOfDay(hour: ceiling.hour, minute: ceiling.minute);
+    }
+
+    final initialTime = TimeOfDay(hour: init.hour, minute: init.minute);
+    final tod = await showDialog<TimeOfDay>(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(init),
-      builder: (ctx, child) {
-        return Theme(
-          data: Theme.of(ctx).copyWith(
-            timePickerTheme: const TimePickerThemeData(
-              backgroundColor: Color(0xFF2C2C2E),
-              hourMinuteTextColor: Colors.white,
-              dialTextColor: Colors.white,
-            ),
-            colorScheme: const ColorScheme.dark(
-              primary: Colors.white70,
-              onSurface: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (ctx) => GlassmorphicTimePicker(
+        initialTime: initialTime,
+        minTime: minTime,
+        maxTime: maxTime,
+      ),
     );
     if (!mounted || tod == null) return null;
 
@@ -1711,18 +1714,11 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: PartitionGlassDialog(
+      child: PartitionGlassDialog.modal(
         constraints: BoxConstraints(
           maxWidth: dialogW,
           minWidth: dialogW,
         ),
-        borderRadius: BorderRadius.circular(24),
-        blurSigma: 18,
-        borderColor: Colors.white.withOpacity(0.22),
-        gradient: const LinearGradient(
-          colors: [Colors.transparent, Colors.transparent],
-        ),
-        boxShadow: const [],
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
         child: GestureDetector(
           onTap: () {},
@@ -2040,6 +2036,7 @@ class _ReservationItemManageDialog extends StatefulWidget {
 class _ReservationItemManageDialogState
     extends State<_ReservationItemManageDialog> {
   static const double _kNameFieldHeight = 46;
+  static const double _kNameFieldInsetLeft = 4;
   int _modeIndex = 0; // 0 = 추가, 1 = 수정
   late List<ReservationItem> _items;
   final TextEditingController _addNameCtrl = TextEditingController();
@@ -2139,6 +2136,42 @@ class _ReservationItemManageDialogState
     }
   }
 
+  Widget _buildReservationNameField({
+    required TextEditingController controller,
+    required String hintText,
+    required TextStyle fieldStyle,
+  }) {
+    const verticalPad =
+        (_kNameFieldHeight - 13) / 2; // fontSize 13 기준 세로 중앙
+    return TextField(
+      controller: controller,
+      style: fieldStyle,
+      textAlignVertical: TextAlignVertical.center,
+      strutStyle: const StrutStyle(
+        fontSize: 13,
+        height: 1.0,
+        forceStrutHeight: true,
+      ),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(
+          color: Colors.white.withOpacity(0.45),
+          fontSize: 13,
+          fontFamily: 'Pretendard Variable',
+          height: 1.0,
+        ),
+        isDense: true,
+        border: InputBorder.none,
+        contentPadding: EdgeInsets.fromLTRB(
+          _kNameFieldInsetLeft,
+          verticalPad,
+          8,
+          verticalPad,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.sizeOf(context).width;
@@ -2151,6 +2184,7 @@ class _ReservationItemManageDialogState
       fontSize: 13,
       fontWeight: FontWeight.w500,
       fontFamily: 'Pretendard Variable',
+      height: 1.0,
     );
 
     final isAdd = _modeIndex == 0;
@@ -2214,24 +2248,18 @@ class _ReservationItemManageDialogState
                 ),
               ),
               const SizedBox(height: 14),
-              ClipRRect(
+              FrostedPanel(
                 borderRadius: BorderRadius.circular(20),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.white.withOpacity(0.08),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.25),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        _buildTab('추가', 0),
-                        _buildTab('수정', 1),
-                      ],
-                    ),
+                backgroundOpacity: 0.1,
+                padding: const EdgeInsets.all(4),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildTab('추가', 0),
+                      _buildTab('수정', 1),
+                    ],
                   ),
                 ),
               ),
@@ -2246,21 +2274,10 @@ class _ReservationItemManageDialogState
                   ),
                   child: SizedBox(
                     height: _kNameFieldHeight,
-                    child: TextField(
+                    child: _buildReservationNameField(
                       controller: _addNameCtrl,
-                      style: fieldStyle,
-                      textAlignVertical: TextAlignVertical.center,
-                      decoration: InputDecoration(
-                        hintText: '새 예약 물품 이름 (예: 욕실, 세탁기)',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.45),
-                          fontSize: 13,
-                          fontFamily: 'Pretendard Variable',
-                        ),
-                        isDense: true,
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                      ),
+                      hintText: '새 예약 물품 이름 (예: 욕실, 세탁기)',
+                      fieldStyle: fieldStyle,
                     ),
                   ),
                 ),
@@ -2309,39 +2326,50 @@ class _ReservationItemManageDialogState
                     borderRadius: BorderRadius.circular(20),
                     backgroundOpacity: 0.1,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 12,
+                      vertical: 0,
                     ),
-                    child: DropdownButtonFormField<int>(
-                      value: _selectedEditItemId,
-                      isExpanded: true,
-                      dropdownColor: const Color(0xFF3A3A3C),
-                      iconEnabledColor: Colors.white70,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
+                    child: SizedBox(
+                      height: _kNameFieldHeight,
+                      child: DropdownButtonFormField<int>(
+                        value: _selectedEditItemId,
+                        isExpanded: true,
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      style: fieldStyle,
-                      items: _items
-                          .map(
-                            (e) => DropdownMenuItem<int>(
-                              value: e.itemId,
-                              child: Text(
-                                e.name,
-                                overflow: TextOverflow.ellipsis,
-                                style: fieldStyle,
+                        alignment: AlignmentDirectional.centerStart,
+                        dropdownColor: const Color(0xFF3A3A3C),
+                        iconEnabledColor: Colors.white70,
+                        padding: const EdgeInsets.only(
+                          left: _kNameFieldInsetLeft,
+                          right: 8,
+                        ),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: (_kNameFieldHeight - 13) / 2,
+                          ),
+                        ),
+                        style: fieldStyle,
+                        items: _items
+                            .map(
+                              (e) => DropdownMenuItem<int>(
+                                value: e.itemId,
+                                child: Text(
+                                  e.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: fieldStyle,
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (id) {
-                        if (id == null) return;
-                        setState(() {
-                          _selectedEditItemId = id;
-                          _syncEditFieldToSelection();
-                        });
-                      },
+                            )
+                            .toList(),
+                        onChanged: (id) {
+                          if (id == null) return;
+                          setState(() {
+                            _selectedEditItemId = id;
+                            _syncEditFieldToSelection();
+                          });
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -2354,21 +2382,10 @@ class _ReservationItemManageDialogState
                     ),
                     child: SizedBox(
                       height: _kNameFieldHeight,
-                      child: TextField(
+                      child: _buildReservationNameField(
                         controller: _editNameCtrl,
-                        style: fieldStyle,
-                        textAlignVertical: TextAlignVertical.center,
-                        decoration: InputDecoration(
-                          hintText: '수정할 이름',
-                          hintStyle: TextStyle(
-                            color: Colors.white.withOpacity(0.45),
-                            fontSize: 13,
-                            fontFamily: 'Pretendard Variable',
-                          ),
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        hintText: '수정할 이름',
+                        fieldStyle: fieldStyle,
                       ),
                     ),
                   ),
@@ -2411,27 +2428,72 @@ class _ReservationItemManageDialogState
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          margin: const EdgeInsets.all(3),
-          padding: const EdgeInsets.symmetric(vertical: 9),
+          curve: Curves.easeInOut,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: selected
-                ? Colors.white.withOpacity(0.22)
-                : Colors.transparent,
             border: selected
-                ? Border.all(color: Colors.white.withOpacity(0.2), width: 0.5)
+                ? Border.all(
+                    color: Colors.white.withOpacity(0.35),
+                    width: 0.5,
+                  )
+                : null,
+            gradient: selected
+                ? const RadialGradient(
+                    center: Alignment(-0.1212, -0.1178),
+                    radius: 1.6319,
+                    colors: [
+                      Color.fromRGBO(255, 255, 255, 0.15),
+                      Color.fromRGBO(255, 255, 255, 0.38),
+                    ],
+                    stops: [0.0, 1.0],
+                  )
+                : null,
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.22),
+                      blurRadius: 20,
+                      spreadRadius: 0,
+                      offset: const Offset(2.5, 2.5),
+                    ),
+                  ]
                 : null,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: selected ? Colors.white : Colors.white.withOpacity(0.5),
-              fontSize: 13,
-              fontWeight:
-                  selected ? FontWeight.w700 : FontWeight.w500,
-              fontFamily: 'Pretendard Variable',
-            ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: selected
+                ? BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    child: Container(
+                      alignment: Alignment.center,
+                      color: Colors.white.withOpacity(0.04),
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          height: 1.0,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Pretendard Variable',
+                        ),
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 13,
+                        height: 1.0,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Pretendard Variable',
+                      ),
+                    ),
+                  ),
           ),
         ),
       ),

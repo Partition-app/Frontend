@@ -128,6 +128,8 @@ class GlassmorphismInputField extends StatelessWidget {
     this.height = 31,
   });
 
+  static const double _textNudgeY = -0.5;
+
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(PartitionUiTokens.fieldRadius);
@@ -154,21 +156,33 @@ class GlassmorphismInputField extends StatelessWidget {
         borderRadius: radius,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: TextField(
-            controller: controller,
-            onChanged: onChanged,
-            autofocus: autofocus,
-            style: const TextStyle(
-              color: PartitionUiTokens.textPrimary,
-              fontSize: PartitionUiTokens.bodyFontSize,
-            ),
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              border: InputBorder.none,
-              hintText: hintText,
-              hintStyle: TextStyle(
-                color: PartitionUiTokens.textHint(0.7),
+          child: Transform.translate(
+            offset: const Offset(0, _textNudgeY),
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              autofocus: autofocus,
+              textAlignVertical: TextAlignVertical.center,
+              style: const TextStyle(
+                color: PartitionUiTokens.textPrimary,
                 fontSize: PartitionUiTokens.bodyFontSize,
+                height: 1.0,
+              ),
+              strutStyle: const StrutStyle(
+                fontSize: PartitionUiTokens.bodyFontSize,
+                height: 1.0,
+                forceStrutHeight: true,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                border: InputBorder.none,
+                hintText: hintText,
+                hintStyle: TextStyle(
+                  color: PartitionUiTokens.textHint(0.7),
+                  fontSize: PartitionUiTokens.bodyFontSize,
+                  height: 1.0,
+                ),
               ),
             ),
           ),

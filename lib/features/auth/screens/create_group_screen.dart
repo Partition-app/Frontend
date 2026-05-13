@@ -14,7 +14,6 @@ class CreateGroupScreen extends StatefulWidget {
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final TextEditingController _groupNameController = TextEditingController();
   bool _isEditing = false;
-  bool _hasGroupName = false;
 
   @override
   void dispose() {
@@ -25,12 +24,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   void _startEditing() {
     setState(() {
       _isEditing = true;
-    });
-  }
-
-  void _onGroupNameChanged(String value) {
-    setState(() {
-      _hasGroupName = value.trim().isNotEmpty;
     });
   }
 
@@ -170,7 +163,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     return GlassmorphismInputField(
       controller: _groupNameController,
       hintText: '그룹명',
-      onChanged: _onGroupNameChanged,
       autofocus: true,
       width: 183,
       height: 31,
@@ -178,14 +170,19 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   }
 
   Widget _buildConfirmButton() {
-    final isEnabled = _hasGroupName && _isEditing;
-    
-    return GlassmorphismButton(
-      text: '확인',
-      onTap: _handleConfirm,
-      width: 183,
-      height: 31,
-      enabled: isEnabled,
+    return ListenableBuilder(
+      listenable: _groupNameController,
+      builder: (context, _) {
+        final isEnabled =
+            _isEditing && _groupNameController.text.trim().isNotEmpty;
+        return GlassmorphismButton(
+          text: '확인',
+          onTap: _handleConfirm,
+          width: 183,
+          height: 31,
+          enabled: isEnabled,
+        );
+      },
     );
   }
 }

@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
+import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 
 /// 글래스 스타일 날짜 선택 다이얼로그.
 class GlassmorphicDatePicker extends StatefulWidget {
@@ -131,243 +131,203 @@ class _GlassmorphicDatePickerState extends State<GlassmorphicDatePicker> {
     final safeVertical = screenHeight - mq.padding.vertical;
     final maxDialogHeight = safeVertical * 0.82;
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      alignment: Alignment.center,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: screenWidth - 32,
-          maxHeight: maxDialogHeight,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(PartitionUiTokens.cardRadius),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(PartitionUiTokens.cardRadius),
-                border: Border.all(
-                  color: Colors.white,
-                  width: 0.5,
-                ),
-                gradient: const RadialGradient(
-                  center: Alignment(-0.1212, -0.1178),
-                  radius: 1.7145,
-                  colors: [
-                    Color.fromRGBO(255, 255, 255, 0.10),
-                    Color.fromRGBO(255, 255, 255, 0.15),
-                  ],
-                  stops: [0.0, 1.0],
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color.fromRGBO(255, 255, 255, 0.25),
-                    offset: Offset(4, 4),
-                    blurRadius: 30,
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              child: DefaultTextStyle.merge(
-                textAlign: TextAlign.center,
-                child: SingleChildScrollView(
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                  // 헤더
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: Opacity(
-                          opacity: _canGoPrevious() ? 1 : 0.3,
-                          child: GestureDetector(
-                            onTap: _canGoPrevious() ? _previousMonth : null,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.15),
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.chevron_left,
-                                color: Colors.white.withOpacity(0.95),
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: Text(
-                            _getMonthYearText(),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'Pretendard Variable',
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: Opacity(
-                          opacity: _canGoNext() ? 1 : 0.3,
-                          child: GestureDetector(
-                            onTap: _canGoNext() ? _nextMonth : null,
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.15),
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.chevron_right,
-                                color: Colors.white.withOpacity(0.95),
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  // 요일 헤더
-                  Row(
-                    children: weekdays.map((day) {
-                      return Expanded(
-                        child: Center(
-                          child: Text(
-                            day,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: 'Pretendard Variable',
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  // 날짜 그리드 — Column(mainAxisSize: min) 안에서는 Expanded 사용 불가(무한 높이·sliver hasSize 충돌).
-                  // shrinkWrap GridView는 자체 높이를 계산하므로 Expanded 없이 둔다.
-                  GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 7,
-                        childAspectRatio: 1.2,
-                        mainAxisSpacing: 4,
-                        crossAxisSpacing: 4,
-                      ),
-                      itemCount: 35,
-                      itemBuilder: (context, index) {
-                        final date = days[index];
-                        final isCurrentMonth = date.month == _currentMonth.month;
-                        final isSelectable = _isDateSelectable(date);
-                        final isSelected = _isDateSelected(date);
-                        final isToday = date.year == DateTime.now().year &&
-                            date.month == DateTime.now().month &&
-                            date.day == DateTime.now().day;
-
-                        return GestureDetector(
-                          onTap: () => _selectDate(date),
+    return PartitionGlassDialog.modal(
+      constraints: BoxConstraints(
+        maxWidth: screenWidth - 32,
+        maxHeight: maxDialogHeight,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      child: DefaultTextStyle.merge(
+        textAlign: TextAlign.center,
+        child: SingleChildScrollView(
+          child: SizedBox(
+            width: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Opacity(
+                        opacity: _canGoPrevious() ? 1 : 0.3,
+                        child: GestureDetector(
+                          onTap: _canGoPrevious() ? _previousMonth : null,
                           child: Container(
-                            margin: const EdgeInsets.all(2),
-                            child: isSelected
-                                ? Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      color: Colors.white.withOpacity(0.15),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.3),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '${date.day}',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          fontFamily: 'Pretendard Variable',
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: isToday
-                                          ? Border.all(
-                                              color: Colors.white.withOpacity(0.3),
-                                              width: 1,
-                                            )
-                                          : null,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '${date.day}',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: isCurrentMonth && isSelectable
-                                              ? Colors.white
-                                              : Colors.white.withOpacity(0.4),
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w400,
-                                          fontFamily: 'Pretendard Variable',
-                                        ),
-                                      ),
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: PartitionUiTokens.surfaceBorderMuted,
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.chevron_left,
+                              color: Colors.white.withOpacity(0.85),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          _getMonthYearText(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Pretendard Variable',
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Opacity(
+                        opacity: _canGoNext() ? 1 : 0.3,
+                        child: GestureDetector(
+                          onTap: _canGoNext() ? _nextMonth : null,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: PartitionUiTokens.surfaceBorderMuted,
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.chevron_right,
+                              color: Colors.white.withOpacity(0.85),
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: weekdays.map((day) {
+                    return Expanded(
+                      child: Center(
+                        child: Text(
+                          day,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.72),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'Pretendard Variable',
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    childAspectRatio: 1.2,
+                    mainAxisSpacing: 4,
+                    crossAxisSpacing: 4,
+                  ),
+                  itemCount: 35,
+                  itemBuilder: (context, index) {
+                    final date = days[index];
+                    final isCurrentMonth = date.month == _currentMonth.month;
+                    final isSelectable = _isDateSelectable(date);
+                    final isSelected = _isDateSelected(date);
+                    final isToday = date.year == DateTime.now().year &&
+                        date.month == DateTime.now().month &&
+                        date.day == DateTime.now().day;
+
+                    return GestureDetector(
+                      onTap: () => _selectDate(date),
+                      child: Container(
+                        margin: const EdgeInsets.all(2),
+                        child: isSelected
+                            ? Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: PartitionUiTokens.surfaceFillMuted,
+                                  border: Border.all(
+                                    color: PartitionUiTokens.surfaceBorderSoft,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${date.day}',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: 'Pretendard Variable',
                                     ),
                                   ),
-                          ),
-                        );
-                      },
-                    ),
-                  const SizedBox(height: 16),
-                  // 버튼
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildActionButton(
-                        label: '취소',
-                        onTap: () => Navigator.of(context).pop(),
+                                ),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: isToday
+                                      ? Border.all(
+                                          color:
+                                              PartitionUiTokens.surfaceBorderSoft,
+                                          width: 0.5,
+                                        )
+                                      : null,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${date.day}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: isCurrentMonth && isSelectable
+                                          ? Colors.white.withOpacity(0.92)
+                                          : Colors.white.withOpacity(0.35),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      fontFamily: 'Pretendard Variable',
+                                    ),
+                                  ),
+                                ),
+                              ),
                       ),
-                      const SizedBox(width: 12),
-                      _buildActionButton(
-                        label: '확인',
-                        onTap: () => Navigator.of(context).pop(_selectedDate),
-                      ),
-                    ],
-                  ),
-                      ],
-                    ),
-                  ),
+                    );
+                  },
                 ),
-              ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildActionButton(
+                      label: '취소',
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildActionButton(
+                      label: '확인',
+                      onTap: () => Navigator.of(context).pop(_selectedDate),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

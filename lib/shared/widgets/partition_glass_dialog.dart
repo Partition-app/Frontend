@@ -34,6 +34,32 @@ class PartitionGlassDialog extends StatelessWidget {
     this.padding,
   });
 
+  /// 예약하기·설정 등 파티션 모달과 동일한 은은한 글래스 톤.
+  factory PartitionGlassDialog.modal({
+    Key? key,
+    required Widget child,
+    BoxConstraints? constraints,
+    EdgeInsetsGeometry? padding,
+    EdgeInsets insetPadding =
+        const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+  }) {
+    return PartitionGlassDialog(
+      key: key,
+      insetPadding: insetPadding,
+      constraints: constraints,
+      padding: padding,
+      borderRadius: const BorderRadius.all(Radius.circular(24)),
+      blurSigma: 18,
+      fillColor: const Color.fromRGBO(255, 255, 255, 0.06),
+      borderColor: const Color.fromRGBO(255, 255, 255, 0.22),
+      gradient: const LinearGradient(
+        colors: [Colors.transparent, Colors.transparent],
+      ),
+      boxShadow: const [],
+      child: child,
+    );
+  }
+
   final Widget child;
   final EdgeInsets insetPadding;
   final AlignmentGeometry alignment;

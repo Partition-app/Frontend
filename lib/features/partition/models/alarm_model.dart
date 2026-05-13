@@ -35,6 +35,15 @@ enum AlarmNoticeType {
     if (this == AlarmNoticeType.unknown) return serverMessage ?? '';
     return defaultMessage.isNotEmpty ? defaultMessage : (serverMessage ?? '');
   }
+
+  /// 정산 **완료** 알림 — 목록 체크 표시는 이 타입 + 읽음일 때만.
+  bool get isSettlementCompletionNotice =>
+      this == AlarmNoticeType.supplySettlementConfirmed ||
+      this == AlarmNoticeType.billSettlementConfirmed;
+
+  bool get isSettlementRequestNotice =>
+      this == AlarmNoticeType.supplySettlementRequested ||
+      this == AlarmNoticeType.billSettlementRequested;
 }
 
 class AlarmItem {

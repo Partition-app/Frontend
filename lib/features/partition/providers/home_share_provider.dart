@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/partition/services/geocoding_service.dart';
 import 'package:partition_app/features/partition/services/home_share_service.dart';
@@ -27,6 +28,22 @@ class HomeShareProvider extends ChangeNotifier {
   StreamSubscription<Position>? _positionSub;
 
   final HomeShareService _service = HomeShareService();
+
+  /// 서버 연동 실패 시 화면에서 스낵바 등으로 표시할 메시지 (한 번 소비 권장).
+  String? _serverNotice;
+  String? get serverNotice => _serverNotice;
+
+  void clearServerNotice() {
+    if (_serverNotice == null) return;
+    _serverNotice = null;
+    notifyListeners();
+  }
+
+  void _setServerNotice(String message) {
+    if (_serverNotice == message) return;
+    _serverNotice = message;
+    notifyListeners();
+  }
 
   bool get isEnabled => _isEnabled;
   bool get isNearHome => _isNearHome;
@@ -71,10 +88,12 @@ class HomeShareProvider extends ChangeNotifier {
       _isEnabled = true;
       await StorageService.setSharingEnabled(true);
 
-      // 서버에 동의 저장 (실패해도 로컬 기능은 동작)
-      _service.saveLocationConsent(agreed: true).catchError((Object e) {
+      try {
+        await _service.saveLocationConsent(agreed: true);
+      } on ApiException catch (e) {
         debugPrint('[HomeShare] 동의 서버 저장 실패: $e');
-      });
+        _setServerNotice(e.message);
+      }
 
       return true;
     } finally {
@@ -90,9 +109,12 @@ class HomeShareProvider extends ChangeNotifier {
     _isNearHome = false;
     await StorageService.setSharingEnabled(false);
 
-    _service.saveLocationConsent(agreed: false).catchError((Object e) {
+    try {
+      await _service.saveLocationConsent(agreed: false);
+    } on ApiException catch (e) {
       debugPrint('[HomeShare] 동의 해제 서버 저장 실패: $e');
-    });
+      _setServerNotice(e.message);
+    }
 
     notifyListeners();
   }
@@ -131,12 +153,16 @@ class HomeShareProvider extends ChangeNotifier {
         await StorageService.setHomeAddress(address);
       }
 
-      // 서버에도 저장 (실패해도 로컬 기능은 동작)
-      _service
-          .saveHomeLocation(lat: pos.latitude, lng: pos.longitude)
-          .catchError((Object e) {
+      try {
+        await _service.saveHomeLocation(
+          lat: pos.latitude,
+          lng: pos.longitude,
+          radiusMeters: _defaultRadius.round(),
+        );
+      } on ApiException catch (e) {
         debugPrint('[HomeShare] 집 위치 서버 저장 실패: $e');
-      });
+        _setServerNotice(e.message);
+      }
 
       notifyListeners();
       return true;
@@ -160,11 +186,16 @@ class HomeShareProvider extends ChangeNotifier {
       await StorageService.setHomeLocation(lat, lng, _defaultRadius);
       await StorageService.setHomeAddress(address);
 
-      _service
-          .saveHomeLocation(lat: lat, lng: lng)
-          .catchError((Object e) {
+      try {
+        await _service.saveHomeLocation(
+          lat: lat,
+          lng: lng,
+          radiusMeters: _defaultRadius.round(),
+        );
+      } on ApiException catch (e) {
         debugPrint('[HomeShare] 집 위치 서버 저장 실패: $e');
-      });
+        _setServerNotice(e.message);
+      }
 
       notifyListeners();
       return true;

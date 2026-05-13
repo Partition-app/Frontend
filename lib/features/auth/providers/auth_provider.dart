@@ -6,10 +6,12 @@ import 'package:partition_app/core/push/fcm_registration_service.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/auth/models/user_model.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
+import 'package:partition_app/features/auth/services/user_service.dart';
 import 'package:partition_app/shared/utils/debug_helper.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
   
   UserModel? _user;
   bool _isLoading = false;
@@ -54,7 +56,10 @@ class AuthProvider extends ChangeNotifier {
     required String kakaoAccessToken,
   }) async {
     DebugHelper.log('🔐 카카오 로그인 시도 시작');
-    DebugHelper.log('카카오 Access Token: ${kakaoAccessToken.substring(0, 20)}...');
+    final tokenPreview = kakaoAccessToken.length > 20
+        ? '${kakaoAccessToken.substring(0, 20)}...'
+        : kakaoAccessToken;
+    DebugHelper.log('카카오 Access Token: $tokenPreview');
     
     _setLoading(true);
     _clearError();
@@ -63,16 +68,23 @@ class AuthProvider extends ChangeNotifier {
       final kakaoAuthResponse = await _authService.loginWithKakao(
         kakaoAccessToken: kakaoAccessToken,
       );
+
+      if (!kakaoAuthResponse.isSuccess || kakaoAuthResponse.result == null) {
+        final msg = kakaoAuthResponse.message.isNotEmpty
+            ? kakaoAuthResponse.message
+            : (kakaoAuthResponse.error ?? '카카오 로그인에 실패했습니다.');
+        _setError(msg);
+        _setLoading(false);
+        return (success: false, userRole: null);
+      }
       
       DebugHelper.log('✅ 카카오 로그인 성공');
-      String? userRole;
-      if (kakaoAuthResponse.result != null) {
-        DebugHelper.log('Access Token 저장 완료');
-        DebugHelper.log('Refresh Token 저장 완료');
-        DebugHelper.log('Access Token 만료 시간: ${kakaoAuthResponse.result!.accessTokenExpiresIn}ms');
-        userRole = kakaoAuthResponse.result!.userRole;
-        DebugHelper.log('User Role: $userRole');
-      }
+      final issued = kakaoAuthResponse.result!;
+      DebugHelper.log('Access Token 저장 완료');
+      DebugHelper.log('Refresh Token 저장 완료');
+      DebugHelper.log('Access Token 만료 시간: ${issued.accessTokenExpiresIn}ms');
+      final userRole = issued.userRole;
+      DebugHelper.log('User Role: $userRole');
       
       // GET /users/me 미구현 — 로컬 토큰·저장 이름으로만 세션 사용자 구성
       _user = await _authService.getUserInfo();
@@ -129,6 +141,16 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    FcmRegistrationService.onLogout();
+    await _authService.logout();
+    _user = null;
+    _clearError();
+    notifyListeners();
+  }
+
+  /// 회원 탈퇴 API 호출. 성공 시 로컬 세션·FCM 정리. 실패 시 [ApiException] 전달.
+  Future<void> withdrawAccount() async {
+    await _userService.withdraw();
     FcmRegistrationService.onLogout();
     await _authService.logout();
     _user = null;

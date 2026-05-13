@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
@@ -138,6 +139,8 @@ class _LoginScreenState extends State<LoginScreen> {
         DebugHelper.log('⚠️ 사용자 정보 조회 실패');
       }
 
+      if (!mounted) return;
+
       // 카카오 로그인 성공 후 서비스 로그인 처리
       try {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -201,8 +204,15 @@ class _LoginScreenState extends State<LoginScreen> {
         final result = await authProvider.loginWithKakao(
           kakaoAccessToken: token.accessToken,
         );
-        
-        if (result.success && mounted) {
+
+        if (!result.success) {
+          if (mounted) {
+            final msg = authProvider.errorMessage ?? '로그인에 실패했습니다.';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(msg)),
+            );
+          }
+        } else if (mounted) {
           // userRole에 따라 적절한 화면으로 이동
           String targetRoute;
           if (result.userRole == 'LEADER' || result.userRole == 'MEMBER') {
@@ -235,15 +245,19 @@ class _LoginScreenState extends State<LoginScreen> {
             // userRole이 없는 경우 기존 로직 사용
             targetRoute = await _getTargetRoute();
           }
-          
+
+          if (!mounted) return;
           Navigator.of(context).pushReplacementNamed(targetRoute);
         }
       } catch (e) {
         DebugHelper.log('서비스 로그인 처리 중 오류: $e');
-        // Provider 에러 발생 시에도 사용자 상태 확인 후 이동
         if (mounted) {
-          final targetRoute = await _getTargetRoute();
-          Navigator.of(context).pushReplacementNamed(targetRoute);
+          final message = e is ApiException
+              ? e.message
+              : '로그인 처리 중 오류가 발생했습니다.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
         }
       }
     } catch (error) {
@@ -263,10 +277,9 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } finally {
+      _isKakaoLoginLoading = false;
       if (mounted) {
-        setState(() {
-          _isKakaoLoginLoading = false;
-        });
+        setState(() {});
       }
     }
   }
@@ -317,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 60),
-                    // 카카오 로그인 버튼 — 공식 에셋 비율 유지 (전체 너비로 늘리지 않음)
+                    // 카카오 로그인 버튼 — 비트맵 확대 대신 벡터 스타일로 선명하게 표시
                     Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 366),
@@ -325,10 +338,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: _isKakaoLoginLoading ? null : _handleKakaoLogin,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                             child: _isKakaoLoginLoading
                                 ? const SizedBox(
-                                    height: 48,
+                                    height: 45,
                                     child: Center(
                                       child: SizedBox(
                                         width: 20,
@@ -342,37 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                   )
-                                : ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.asset(
-                                      'assets/images/kakao_login_medium_wide.png',
-                                      fit: BoxFit.contain,
-                                      width: double.infinity,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Container(
-                                          width: double.infinity,
-                                          constraints: const BoxConstraints(
-                                            maxWidth: 366,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFEE500),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
-                                          child: const Center(
-                                            child: Text(
-                                              '카카오 로그인',
-                                              style: TextStyle(
-                                                color: Color(0xFF000000),
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
+                                : const _KakaoLoginButtonFace(),
                           ),
                         ),
                       ),
@@ -387,4 +370,75 @@ class _LoginScreenState extends State<LoginScreen> {
       ],
     );
   }
+}
+
+/// 저해상도 PNG(300×45) 확대 시 흐려지므로 공식 색·타이포로 렌더링합니다.
+class _KakaoLoginButtonFace extends StatelessWidget {
+  const _KakaoLoginButtonFace();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 45,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEE500),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _KakaoTalkSymbol(size: 18),
+          SizedBox(width: 8),
+          Text(
+            '카카오 로그인',
+            style: TextStyle(
+              color: Color(0xFF000000),
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              height: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KakaoTalkSymbol extends StatelessWidget {
+  final double size;
+
+  const _KakaoTalkSymbol({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _KakaoTalkSymbolPainter(),
+      ),
+    );
+  }
+}
+
+class _KakaoTalkSymbolPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bubble = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height * 0.86),
+      Radius.circular(size.width * 0.42),
+    );
+    canvas.drawRRect(bubble, Paint()..color = const Color(0xFF000000));
+
+    final tail = Path()
+      ..moveTo(size.width * 0.22, size.height * 0.78)
+      ..lineTo(size.width * 0.10, size.height)
+      ..lineTo(size.width * 0.34, size.height * 0.78)
+      ..close();
+    canvas.drawPath(tail, Paint()..color = const Color(0xFF000000));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

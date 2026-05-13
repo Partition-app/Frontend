@@ -237,6 +237,8 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
 
     try {
       await _authService.deleteMyAccountOnServer();
+      if (!ctx.mounted) return;
+      await ctx.read<AuthProvider>().logout();
     } catch (e) {
       if (!ctx.mounted) return;
       final msg = e is ApiException ? e.message : '회원 탈퇴에 실패했어요.';
@@ -247,8 +249,6 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
     try {
       await KakaoAuthService.logout();
     } catch (_) {}
-    if (!ctx.mounted) return;
-    await ctx.read<AuthProvider>().logout();
     if (!ctx.mounted) return;
     Navigator.of(ctx, rootNavigator: true).pushNamedAndRemoveUntil(
       AppRouter.login,
@@ -746,6 +746,172 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
   }
 }
 
+// ── 설정 모달과 동일한 서브 다이얼로그 스타일 ─────────────────────────────────
+
+PartitionGlassDialog _wrapSettingsSubdialog(Widget child) {
+  return PartitionGlassDialog(
+    insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+    constraints: const BoxConstraints(maxWidth: 360),
+    borderRadius: BorderRadius.circular(24),
+    blurSigma: 18,
+    fillColor: const Color.fromRGBO(255, 255, 255, 0.12),
+    borderColor: const Color.fromRGBO(255, 255, 255, 0.22),
+    gradient: const LinearGradient(
+      colors: [Colors.transparent, Colors.transparent],
+    ),
+    boxShadow: const [],
+    padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+    child: child,
+  );
+}
+
+class _SettingsSubdialogHeader extends StatelessWidget {
+  const _SettingsSubdialogHeader({
+    required this.title,
+    required this.onClose,
+  });
+
+  final String title;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(width: 40),
+        Expanded(
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              fontFamily: 'Pretendard Variable',
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: '닫기',
+          onPressed: onClose,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          icon: Icon(
+            Icons.close_rounded,
+            color: Colors.white.withOpacity(0.88),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsSubdialogButton extends StatelessWidget {
+  const _SettingsSubdialogButton({
+    required this.label,
+    required this.foregroundColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color foregroundColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: PartitionUiTokens.actionButtonHeight,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius:
+              BorderRadius.circular(PartitionUiTokens.actionButtonRadius),
+          onTap: onTap,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(
+                PartitionUiTokens.actionButtonRadius,
+              ),
+              border: Border.all(color: Colors.white.withOpacity(0.18)),
+              color: Colors.white.withOpacity(0.05),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: foregroundColor,
+                fontSize: PartitionUiTokens.actionFontSize,
+                fontWeight: PartitionUiTokens.actionWeight,
+                fontFamily: 'Pretendard Variable',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsSubdialogTextField extends StatelessWidget {
+  const _SettingsSubdialogTextField({
+    required this.controller,
+    required this.hintText,
+    this.maxLength,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final int? maxLength;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: PartitionUiTokens.actionButtonHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: PartitionUiTokens.surfaceFillMuted,
+        borderRadius: BorderRadius.circular(PartitionUiTokens.fieldRadius),
+        border: Border.all(color: PartitionUiTokens.surfaceBorderMuted),
+      ),
+      alignment: Alignment.center,
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLength: maxLength,
+        textAlignVertical: TextAlignVertical.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: PartitionUiTokens.actionFontSize,
+          fontFamily: 'Pretendard Variable',
+          height: 1.0,
+        ),
+        strutStyle: const StrutStyle(
+          fontSize: PartitionUiTokens.actionFontSize,
+          height: 1.0,
+          forceStrutHeight: true,
+        ),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(
+            color: Colors.white.withOpacity(0.35),
+            fontSize: PartitionUiTokens.actionFontSize,
+            fontFamily: 'Pretendard Variable',
+            height: 1.0,
+          ),
+          isDense: true,
+          border: InputBorder.none,
+          counterText: '',
+          contentPadding: EdgeInsets.zero,
+        ),
+        onSubmitted: onSubmitted,
+      ),
+    );
+  }
+}
+
 class _RenameHouseholdNameDialog extends StatefulWidget {
   const _RenameHouseholdNameDialog({required this.initialName});
 
@@ -787,79 +953,33 @@ class _RenameHouseholdNameDialogState extends State<_RenameHouseholdNameDialog> 
 
   @override
   Widget build(BuildContext context) {
-    return PartitionGlassDialog(
-      constraints: const BoxConstraints(maxWidth: 360),
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-      child: Column(
+    return _wrapSettingsSubdialog(
+      Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            '그룹명 변경',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 17,
-              fontFamily: 'Pretendard Variable',
-            ),
+          _SettingsSubdialogHeader(
+            title: '그룹명 변경',
+            onClose: () => Navigator.of(context).pop(),
           ),
-          const SizedBox(height: 16),
-          TextField(
+          const SizedBox(height: 14),
+          _SettingsSubdialogTextField(
             controller: _controller,
-            autofocus: true,
+            hintText: '새 그룹명',
             maxLength: 40,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontFamily: 'Pretendard Variable',
-            ),
-            decoration: InputDecoration(
-              hintText: '새 그룹명',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.35)),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
-              border: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(PartitionUiTokens.fieldRadius),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(PartitionUiTokens.fieldRadius),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(PartitionUiTokens.fieldRadius),
-                borderSide: const BorderSide(color: HomeShareStyle.point),
-              ),
-              counterStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
-            ),
             onSubmitted: (_) => _submit(),
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  '취소',
-                  style: TextStyle(color: Colors.white.withOpacity(0.55)),
-                ),
-              ),
-              TextButton(
-                onPressed: _submit,
-                child: const Text(
-                  '저장',
-                  style: TextStyle(
-                    color: HomeShareStyle.point,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 20),
+          _SettingsSubdialogButton(
+            label: '취소',
+            foregroundColor: PartitionUiTokens.actionText,
+            onTap: () => Navigator.of(context).pop(),
+          ),
+          const SizedBox(height: 10),
+          _SettingsSubdialogButton(
+            label: '저장',
+            foregroundColor: HomeShareStyle.point,
+            onTap: _submit,
           ),
         ],
       ),
@@ -916,24 +1036,16 @@ class _PickNewLeaderDialogState extends State<_PickNewLeaderDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return PartitionGlassDialog(
-      constraints: const BoxConstraints(maxWidth: 360),
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-      child: Column(
+    return _wrapSettingsSubdialog(
+      Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            '새 그룹장 선택',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 17,
-              fontFamily: 'Pretendard Variable',
-            ),
+          _SettingsSubdialogHeader(
+            title: '그룹장 변경',
+            onClose: () => Navigator.of(context).pop(),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.maxFinite,
             child: _loading
@@ -952,24 +1064,31 @@ class _PickNewLeaderDialogState extends State<_PickNewLeaderDialog> {
                         children: [
                           Text(
                             _error!,
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.85),
-                              height: 1.4,
+                              color: Colors.white.withOpacity(0.82),
+                              fontSize: 14,
+                              height: 1.45,
+                              fontFamily: 'Pretendard Variable',
                             ),
                           ),
                           const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: _load,
-                            child: const Text('다시 시도'),
+                          _SettingsSubdialogButton(
+                            label: '다시 시도',
+                            foregroundColor: PartitionUiTokens.actionText,
+                            onTap: _load,
                           ),
                         ],
                       )
                     : _candidates.isEmpty
                         ? Text(
                             '그룹장을 넘길 다른 그룹원이 없어요.',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.82),
+                              fontSize: 14,
                               height: 1.45,
+                              fontFamily: 'Pretendard Variable',
                             ),
                           )
                         : ConstrainedBox(
@@ -977,72 +1096,114 @@ class _PickNewLeaderDialogState extends State<_PickNewLeaderDialog> {
                             child: ListView.separated(
                               shrinkWrap: true,
                               itemCount: _candidates.length,
-                              separatorBuilder: (_, __) => Divider(
-                                height: 1,
-                                color: Colors.white.withOpacity(0.12),
-                              ),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
                               itemBuilder: (context, i) {
                                 final m = _candidates[i];
-                                final roleLabel = m.role == 'LEADER' ? '리더' : '멤버';
-                                final initial = m.name.isNotEmpty ? m.name.characters.first : '?';
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: Colors.white.withOpacity(0.08),
-                                    foregroundImage: m.profileImage != null
-                                        ? NetworkImage(m.profileImage!)
-                                        : null,
-                                    child: Text(
-                                      initial,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        fontFamily: 'Pretendard Variable',
+                                final roleLabel =
+                                    m.role == 'LEADER' ? '리더' : '멤버';
+                                final initial = m.name.isNotEmpty
+                                    ? m.name.characters.first
+                                    : '?';
+                                return Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(
+                                      PartitionUiTokens.actionButtonRadius,
+                                    ),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(m.userId),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 12,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: PartitionUiTokens
+                                            .surfaceFillMuted,
+                                        borderRadius: BorderRadius.circular(
+                                          PartitionUiTokens
+                                              .actionButtonRadius,
+                                        ),
+                                        border: Border.all(
+                                          color: PartitionUiTokens
+                                              .surfaceBorderMuted,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 18,
+                                            backgroundColor: Colors.white
+                                                .withOpacity(0.08),
+                                            foregroundImage:
+                                                m.profileImage != null
+                                                    ? NetworkImage(
+                                                        m.profileImage!)
+                                                    : null,
+                                            child: Text(
+                                              initial,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                fontFamily:
+                                                    'Pretendard Variable',
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  m.name,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    fontFamily:
+                                                        'Pretendard Variable',
+                                                    height: 1.25,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  roleLabel,
+                                                  style: TextStyle(
+                                                    color: Colors.white
+                                                        .withOpacity(0.5),
+                                                    fontSize: 12,
+                                                    fontFamily:
+                                                        'Pretendard Variable',
+                                                    height: 1.3,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.chevron_right_rounded,
+                                            color: Colors.white
+                                                .withOpacity(0.45),
+                                            size: 22,
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                                  title: Text(
-                                    m.name,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      fontFamily: 'Pretendard Variable',
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    roleLabel,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.48),
-                                      fontSize: 12,
-                                      fontFamily: 'Pretendard Variable',
-                                    ),
-                                  ),
-                                  trailing: Icon(
-                                    Icons.chevron_right_rounded,
-                                    color: Colors.white.withOpacity(0.4),
-                                  ),
-                                  onTap: () =>
-                                      Navigator.of(context).pop(m.userId),
                                 );
                               },
                             ),
                           ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  '닫기',
-                  style: TextStyle(color: Colors.white.withOpacity(0.55)),
-                ),
-              ),
-            ],
+          const SizedBox(height: 20),
+          _SettingsSubdialogButton(
+            label: '닫기',
+            foregroundColor: PartitionUiTokens.actionText,
+            onTap: () => Navigator.of(context).pop(),
           ),
         ],
       ),

@@ -12,6 +12,7 @@ import 'package:partition_app/features/auth/models/kakao_auth_response_model.dar
 import 'package:partition_app/features/auth/models/update_name_response_model.dart';
 import 'package:partition_app/features/auth/models/household_response_model.dart';
 import 'package:partition_app/features/auth/models/preference_response_model.dart';
+import 'package:partition_app/features/auth/services/user_service.dart';
 
 /// 하우스 멤버 (`POST /supplies/settlement`의 `memberIds` 등)
 class HouseholdMemberBrief {
@@ -61,6 +62,7 @@ String? _parseHouseholdMemberRole(Map<String, dynamic> e) {
 
 class AuthService {
   final ApiClient _apiClient = ApiClient();
+  final UserService _userService = UserService();
 
   Future<AuthResponseModel> login(String email, String password) async {
     try {
@@ -247,32 +249,8 @@ class AuthService {
     }
   }
 
-  /// 회원 탈퇴 — `POST /users/me/withdraw` (본문 없음 · `{}`).
-  ///
-  /// 성공: `isSuccess: true`, `result: null`.
-  /// 404 `USER_4001`, 400 `USER_4002`(그룹 리더는 위임 후 탈퇴) 등은 서버 `message`를 그대로 전달합니다.
-  Future<void> deleteMyAccountOnServer() async {
-    try {
-      final response = await _apiClient.post(
-        AppConfig.userWithdrawEndpoint,
-        data: const <String, dynamic>{},
-      );
-      final data = response.data;
-      if (data is Map<String, dynamic> && data['isSuccess'] == false) {
-        final message = (data['message'] as String?)?.trim();
-        throw ApiException(
-          message:
-              message != null && message.isNotEmpty
-                  ? message
-                  : '회원 탈퇴에 실패했어요.',
-          statusCode: response.statusCode,
-        );
-      }
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException.fromDioError(e);
-    }
-  }
+  /// 회원 탈퇴 — `POST /users/me/withdraw` (본문 없음).
+  Future<void> deleteMyAccountOnServer() => _userService.withdraw();
 
   /// 그룹(가구) 참여
   Future<HouseholdResponseModel> joinHousehold({

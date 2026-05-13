@@ -18,7 +18,6 @@ class _EnterGroupCodeScreenState extends State<EnterGroupCodeScreen> {
   bool _isLoading = false;
   String? _resultMessage;
   bool _isSuccess = false;
-  bool _hasCode = false;
 
   @override
   void dispose() {
@@ -205,14 +204,9 @@ class _EnterGroupCodeScreenState extends State<EnterGroupCodeScreen> {
                 GlassmorphismInputField(
                   controller: _codeController,
                   hintText: '그룹 코드',
-                  onChanged: (value) {
-                    setState(() {
-                      _hasCode = value.trim().isNotEmpty;
-                    });
-                  },
                   autofocus: true,
                   width: 183,
-                  height: 31,
+                  height: 47,
                 ),
                 const SizedBox(height: 16),
                 // 확인 버튼
@@ -233,12 +227,19 @@ class _EnterGroupCodeScreenState extends State<EnterGroupCodeScreen> {
                           ),
                         ),
                       )
-                    : GlassmorphismButton(
-                        text: '확인',
-                        onTap: _hasCode ? _handleSubmit : null,
-                        width: 183,
-                        height: 31,
-                        enabled: _hasCode,
+                    : ListenableBuilder(
+                        listenable: _codeController,
+                        builder: (context, _) {
+                          final hasCode =
+                              _codeController.text.trim().isNotEmpty;
+                          return GlassmorphismButton(
+                            text: '확인',
+                            onTap: hasCode ? _handleSubmit : null,
+                            width: 183,
+                            height: 31,
+                            enabled: hasCode,
+                          );
+                        },
                       ),
                 // 결과 메시지
                 if (_resultMessage != null) ...[

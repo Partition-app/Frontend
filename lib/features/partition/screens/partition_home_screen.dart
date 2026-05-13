@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:partition_app/features/partition/providers/home_share_provider.dart';
@@ -15,6 +16,21 @@ import 'package:partition_app/shared/widgets/chore_assignment_modal.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/schedule_registration_modal.dart';
 import 'package:partition_app/shared/widgets/partition_home_settings_modal.dart';
+
+/// 귀가 공유 API(동의·집 위치·알림 전송) 실패 시 서버 메시지를 스낵바로 한 번 표시합니다.
+void _showHomeShareServerNoticeIfAny(BuildContext context) {
+  if (!context.mounted) return;
+  final provider = context.read<HomeShareProvider>();
+  final msg = provider.serverNotice;
+  if (msg == null) return;
+  provider.clearServerNotice();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(msg),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
 
 class PartitionHomeScreen extends StatefulWidget {
   const PartitionHomeScreen({super.key});
@@ -109,6 +125,9 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
 
     if (provider.isEnabled) {
       await provider.disableSharing();
+      if (context.mounted) {
+        _showHomeShareServerNoticeIfAny(context);
+      }
       return;
     }
 
@@ -116,12 +135,17 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     if (provider.homeLocation == null) {
       final bool set = await _showHomeSetupDialog(context);
       if (!set) return;
+      if (context.mounted) {
+        _showHomeShareServerNoticeIfAny(context);
+      }
     }
 
     final bool success = await provider.enableSharing();
     if (!success && context.mounted) {
       // ignore: use_build_context_synchronously
       _showEnableFailFeedback(context);
+    } else if (context.mounted) {
+      _showHomeShareServerNoticeIfAny(context);
     }
   }
 
@@ -153,92 +177,95 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
-      builder: (ctx) => _PartitionGlassModalCard(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const SizedBox(width: 40),
-                  const Expanded(
-                    child: Text(
-                      '위치 권한 필요',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        fontFamily: 'Pretendard Variable',
-                        height: 1.15,
+      builder: (ctx) => Transform.translate(
+        offset: const Offset(0, -10),
+        child: _PartitionGlassModalCard(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(width: 40),
+                    const Expanded(
+                      child: Text(
+                        '위치 권한 필요',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          fontFamily: 'Pretendard Variable',
+                          height: 1.15,
+                        ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: '닫기',
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      color: Colors.white.withOpacity(0.9),
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 40,
-                      minHeight: 40,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '귀가 공유를 사용하려면 위치 권한이 필요합니다.\n'
-                '설정 > Partition App > 위치에서 허용해주세요.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.82),
-                  fontSize: 14,
-                  height: 1.5,
-                  fontFamily: 'Pretendard Variable',
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
+                    IconButton(
+                      tooltip: '닫기',
                       onPressed: () => Navigator.of(ctx).pop(),
-                      child: Text(
-                        '취소',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.65),
-                          fontFamily: 'Pretendard Variable',
-                          fontWeight: FontWeight.w500,
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '귀가 공유를 사용하려면 위치 권한이 필요합니다.\n'
+                  '설정 > Partition App > 위치에서 허용해주세요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.82),
+                    fontSize: 14,
+                    height: 1.5,
+                    fontFamily: 'Pretendard Variable',
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: Text(
+                          '취소',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.65),
+                            fontFamily: 'Pretendard Variable',
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () async {
-                        Navigator.of(ctx).pop();
-                        await openAppSettings();
-                      },
-                      child: Text(
-                        '설정 열기',
-                        style: TextStyle(
-                          color: HomeShareStyle.point.withOpacity(0.95),
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'Pretendard Variable',
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () async {
+                          Navigator.of(ctx).pop();
+                          await Geolocator.openAppSettings();
+                        },
+                        child: Text(
+                          '설정 열기',
+                          style: TextStyle(
+                            color: HomeShareStyle.point.withOpacity(0.95),
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Pretendard Variable',
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -956,6 +983,7 @@ class _HomeLocationChangeDialogState extends State<_HomeLocationChangeDialog> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+      _showHomeShareServerNoticeIfAny(context);
     } else {
       setState(() {
         _locationLoading = false;
@@ -973,7 +1001,9 @@ class _HomeLocationChangeDialogState extends State<_HomeLocationChangeDialog> {
     final provider = context.read<HomeShareProvider>();
     await provider.setHomeFromCoordinates(
         place.lat, place.lng, place.formattedAddress);
-    if (mounted) Navigator.of(context).pop(true);
+    if (!mounted) return;
+    _showHomeShareServerNoticeIfAny(context);
+    Navigator.of(context).pop(true);
   }
 
   @override

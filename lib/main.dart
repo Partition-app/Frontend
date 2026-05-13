@@ -19,6 +19,9 @@ import 'package:partition_app/features/auth/services/auth_service.dart';
 const double _kPhoneFrameBreakpoint = 800.0;
 const double _kPhoneFrameWidth = 730.0;
 
+/// 웹/PWA에서 앱 바깥(상·하단 세이프에어리어·레터박스) 배경색
+const Color _kWebBackdropColor = Color(0xFF26394B);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -43,8 +46,8 @@ void main() async {
 /// 모바일 Safari 등에서 scaffold 기본값(밝은 배경)이 비치지 않도록.
 ThemeData _webPageBackdrop(ThemeData base) {
   return base.copyWith(
-    scaffoldBackgroundColor: const Color(0xFF060F18),
-    canvasColor: const Color(0xFF060F18),
+    scaffoldBackgroundColor: _kWebBackdropColor,
+    canvasColor: _kWebBackdropColor,
   );
 }
 
@@ -95,8 +98,18 @@ class _PhoneFrameWrapper extends StatelessWidget {
         final double screenW = constraints.maxWidth;
         final double screenH = constraints.maxHeight;
 
-        // 이미 폰 크기이거나 세로가 더 짧은 경우 → 그대로 렌더
+        // 이미 폰 크기이거나 세로가 더 짧은 경우
         if (screenW <= _kPhoneFrameBreakpoint) {
+          if (kIsWeb) {
+            return ColoredBox(
+              color: _kWebBackdropColor,
+              child: SizedBox(
+                width: screenW,
+                height: screenH,
+                child: child,
+              ),
+            );
+          }
           return child;
         }
 
@@ -113,7 +126,7 @@ class _PhoneFrameWrapper extends StatelessWidget {
         return Container(
           width: screenW,
           height: screenH,
-          color: const Color(0xFF060F18), // 앱 테마와 어우러지는 짙은 네이비
+          color: _kWebBackdropColor,
           child: Center(
             child: SizedBox(
               width: frameW,
