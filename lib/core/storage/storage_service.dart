@@ -193,6 +193,21 @@ class StorageService {
     return DateTime.fromMillisecondsSinceEpoch(ms);
   }
 
+  /// 룸메이트 집 근처 진입 FCM 수신 시각 (30분 TTL용)
+  static Future<bool> setRoommateNearHomeAt(DateTime time) async {
+    return await _prefs?.setInt(
+          'roommate_near_home_at',
+          time.millisecondsSinceEpoch,
+        ) ??
+        false;
+  }
+
+  static DateTime? getRoommateNearHomeAt() {
+    final ms = _prefs?.getInt('roommate_near_home_at');
+    if (ms == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
   /// 가구 참여 정보만 초기화(토큰·닉네임 유지 → 그룹 선택·재참여용).
   static Future<void> clearHouseholdAffiliation() async {
     try {

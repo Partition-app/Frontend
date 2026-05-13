@@ -17,7 +17,6 @@ import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/schedule_registration_modal.dart';
 import 'package:partition_app/shared/widgets/partition_home_settings_modal.dart';
 import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
-import 'package:partition_app/shared/widgets/glassmorphism_widget.dart';
 
 /// 귀가 공유 API(동의·집 위치·알림 전송) 실패 시 서버 메시지를 스낵바로 한 번 표시합니다.
 void _showHomeShareServerNoticeIfAny(BuildContext context) {
@@ -473,9 +472,8 @@ class _HomeShareCardBody extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: partitionGlassBlurBackdrop(
-        sigma: 14,
-        borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(

@@ -85,6 +85,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   int _alarmFetchGeneration = 0;
   final Set<int> _alarmMarkReadBusy = {};
   bool _initialFcmOpenHandled = false;
+  StreamSubscription<RemoteMessage>? _fcmForegroundSub;
 
   void _showAlarmApiFeedback(String message, {required bool isError}) {
     if (!mounted) return;
@@ -200,8 +201,11 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   }
 
   /// FCM `data`에 `settlementId`·`referenceId`·`type`(또는 `alarmType`)·선택 `alarmId` 포함 시 공용소비로 이동.
+  /// `type: NEAR_HOME_ARRIVAL` 이면 알림 패널 상단 귀가 배너를 갱신합니다.
   void _handleFcmRemoteOpenForAlarmNavigation(RemoteMessage message) {
     if (!mounted) return;
+    if (_tryHandleNearHomeArrivalFcm(message)) return;
+
     final data = message.data;
     final sid = int.tryParse(
       data['settlementId']?.toString() ?? data['referenceId']?.toString() ?? '',
@@ -221,6 +225,21 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
           ),
         );
     _switchToTab(1, animate: false);
+  }
+
+  bool _tryHandleNearHomeArrivalFcm(RemoteMessage message) {
+    final type = message.data['type']?.toString() ??
+        message.data['alarmType']?.toString() ??
+        '';
+    if (type != 'NEAR_HOME_ARRIVAL') return false;
+    context.read<HomeShareProvider>().applyRoommateNearHomeEvent();
+    debugPrint('[HomeShare] NEAR_HOME_ARRIVAL FCM 수신 → 귀가 배너 갱신');
+    return true;
+  }
+
+  void _handleForegroundFcm(RemoteMessage message) {
+    if (!mounted) return;
+    if (_tryHandleNearHomeArrivalFcm(message)) return;
   }
 
   String _formatAlarmTime(DateTime d) {
@@ -250,6 +269,8 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
     FcmRegistrationService.attachRemoteOpenListener(
       _handleFcmRemoteOpenForAlarmNavigation,
     );
+    _fcmForegroundSub =
+        FirebaseMessaging.onMessage.listen(_handleForegroundFcm);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -271,6 +292,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
 
   @override
   void dispose() {
+    _fcmForegroundSub?.cancel();
     _panelController.removeListener(_handlePanelForAlarms);
     _glowController?.dispose();
     _panelController.dispose();
@@ -648,6 +670,84 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
 
   Widget _buildNotificationBody() {
     context.watch<AlarmNavigationController>();
+    final roommateNearHome = context.watch<HomeShareProvider>().roommateNearHome;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: _buildRoommateNearHomeBanner(nearHome: roommateNearHome),
+        ),
+        Expanded(child: _buildAlarmListBody()),
+      ],
+    );
+  }
+
+  Widget _buildRoommateNearHomeBanner({required bool nearHome}) {
+    final accent = nearHome
+        ? HomeShareStyle.point
+        : Colors.white.withOpacity(0.72);
+    final fill = nearHome
+        ? HomeShareStyle.pointFillSoft(0.12)
+        : Colors.white.withOpacity(0.06);
+    final stroke = nearHome
+        ? HomeShareStyle.pointStroke(0.34)
+        : Colors.white.withOpacity(0.16);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: stroke, width: 0.7),
+        color: fill,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        child: Row(
+          children: [
+            Container(
+              width: nearHome ? 9 : 8,
+              height: nearHome ? 9 : 8,
+              decoration: BoxDecoration(
+                color: nearHome ? HomeShareStyle.point : Colors.white.withOpacity(0.28),
+                shape: BoxShape.circle,
+                boxShadow: nearHome
+                    ? [
+                        BoxShadow(
+                          color: HomeShareStyle.point.withOpacity(0.45),
+                          blurRadius: 10,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                nearHome
+                    ? '룸메이트가 집 근처에 있어요.'
+                    : '룸메이트가 집 근처에 없어요.',
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 15,
+                  fontWeight: nearHome ? FontWeight.w700 : FontWeight.w500,
+                  height: 1.35,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ),
+            Icon(
+              nearHome ? Icons.home_rounded : Icons.home_outlined,
+              size: 20,
+              color: accent.withOpacity(nearHome ? 0.92 : 0.55),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlarmListBody() {
     if (_alarmLoading && _alarms.isEmpty && _alarmError == null) {
       return Center(
         child: SizedBox(

@@ -16,16 +16,19 @@ import 'package:partition_app/features/partition/services/home_share_service.dar
 ///   4. [setHomeFromCurrentLocation] — 현재 GPS 좌표를 집 위치로 저장
 class HomeShareProvider extends ChangeNotifier {
   static const Duration _cooldown = Duration(minutes: 30);
+  static const Duration _roommateNearHomeTtl = Duration(minutes: 30);
   static const double _defaultRadius = 300.0;
 
   bool _isEnabled = false;
   bool _isNearHome = false;
+  bool _roommateNearHome = false;
   bool _isLoading = false;
 
   ({double lat, double lng, double radius})? _homeLocation;
   String? _homeAddress;
   DateTime? _lastNotifiedAt;
   StreamSubscription<Position>? _positionSub;
+  Timer? _roommateNearHomeExpiryTimer;
 
   final HomeShareService _service = HomeShareService();
 
@@ -47,6 +50,8 @@ class HomeShareProvider extends ChangeNotifier {
 
   bool get isEnabled => _isEnabled;
   bool get isNearHome => _isNearHome;
+  /// 다른 룸메이트의 집 근처 진입 FCM 수신 여부 (30분 TTL)
+  bool get roommateNearHome => _roommateNearHome;
   bool get isLoading => _isLoading;
   ({double lat, double lng, double radius})? get homeLocation => _homeLocation;
   String? get homeAddress => _homeAddress;
@@ -71,6 +76,15 @@ class HomeShareProvider extends ChangeNotifier {
     if (_isEnabled && _homeLocation != null) {
       await _startLocationWatch();
     }
+    _restoreRoommateNearHomeFromStorage();
+    notifyListeners();
+  }
+
+  /// FCM `NEAR_HOME_ARRIVAL` 수신 시 알림 패널 상단 배너를 갱신합니다.
+  void applyRoommateNearHomeEvent() {
+    _roommateNearHome = true;
+    unawaited(StorageService.setRoommateNearHomeAt(DateTime.now()));
+    _scheduleRoommateNearHomeExpiry();
     notifyListeners();
   }
 
@@ -225,6 +239,34 @@ class HomeShareProvider extends ChangeNotifier {
 
   // ── 내부 메서드 ────────────────────────────────────────────────────────────
 
+  void _restoreRoommateNearHomeFromStorage() {
+    final at = StorageService.getRoommateNearHomeAt();
+    if (at == null) {
+      _roommateNearHome = false;
+      return;
+    }
+    final elapsed = DateTime.now().difference(at);
+    if (elapsed >= _roommateNearHomeTtl) {
+      _roommateNearHome = false;
+      return;
+    }
+    _roommateNearHome = true;
+    _scheduleRoommateNearHomeExpiry(remaining: _roommateNearHomeTtl - elapsed);
+  }
+
+  void _scheduleRoommateNearHomeExpiry({Duration? remaining}) {
+    _roommateNearHomeExpiryTimer?.cancel();
+    final wait = remaining ?? _roommateNearHomeTtl;
+    if (wait <= Duration.zero) {
+      _roommateNearHome = false;
+      return;
+    }
+    _roommateNearHomeExpiryTimer = Timer(wait, () {
+      _roommateNearHome = false;
+      notifyListeners();
+    });
+  }
+
   Future<bool> _ensureLocationPermission() async {
     final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;
@@ -300,6 +342,7 @@ class HomeShareProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _roommateNearHomeExpiryTimer?.cancel();
     _stopLocationWatch();
     super.dispose();
   }
