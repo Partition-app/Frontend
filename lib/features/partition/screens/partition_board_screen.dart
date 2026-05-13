@@ -11,6 +11,7 @@ import 'package:partition_app/shared/widgets/frosted_panel.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_date_picker.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_time_picker.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 import 'package:partition_app/shared/widgets/primary_button.dart';
 import 'package:partition_app/shared/utils/partition_dummy_data_policy.dart';
 import 'package:partition_app/core/network/api_exception.dart';
@@ -1742,13 +1743,9 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                       Positioned(
                         right: -8,
                         top: -8,
-                        child: IconButton(
+                        child: PartitionModalCloseButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            color: Colors.white70,
-                          ),
-                          visualDensity: VisualDensity.compact,
+                          color: Colors.white70,
                         ),
                       ),
                     ],
@@ -2223,13 +2220,9 @@ class _ReservationItemManageDialogState
                   Positioned(
                     right: -8,
                     top: -8,
-                    child: IconButton(
+                    child: PartitionModalCloseButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white70,
-                      ),
-                      visualDensity: VisualDensity.compact,
+                      color: Colors.white70,
                     ),
                   ),
                 ],

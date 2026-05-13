@@ -18,6 +18,7 @@ import 'package:partition_app/features/partition/widgets/shared_expense_item_det
 import 'package:partition_app/shared/widgets/frosted_panel.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_date_picker.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 import 'package:partition_app/shared/widgets/primary_button.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/partition/services/supply_service.dart';
@@ -236,6 +237,11 @@ class _PartitionSharedExpenseScreenState
       final detail =
           await _utilityBillService.fetchBillSettlementDetail(settlementId);
       if (!mounted) return;
+      if (detail.isConfirmed) {
+        context.read<AlarmNavigationController>().registerBillSettlementConfirmedForAlarmUi(
+              detail.settlementId,
+            );
+      }
       final shouldConfirm = await _showAlarmSettlementDialog(
         title: '공과금 정산',
         settlementId: detail.settlementId,
@@ -261,6 +267,9 @@ class _PartitionSharedExpenseScreenState
       try {
         await _utilityBillService.confirmBillSettlement(settlementId);
         if (!mounted) return;
+        context.read<AlarmNavigationController>().registerBillSettlementConfirmedForAlarmUi(
+              settlementId,
+            );
         await _loadUtilityBills();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -331,13 +340,9 @@ class _PartitionSharedExpenseScreenState
                   ),
                   Positioned(
                     right: -8,
-                    child: IconButton(
+                    child: PartitionModalCloseButton(
                       onPressed: () => Navigator.of(ctx).pop(false),
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: Colors.white70,
-                      ),
-                      visualDensity: VisualDensity.compact,
+                      color: Colors.white70,
                     ),
                   ),
                 ],
@@ -915,13 +920,9 @@ class _PartitionSharedExpenseScreenState
                     ),
                     Positioned(
                       right: -8,
-                      child: IconButton(
+                      child: PartitionModalCloseButton(
                         onPressed: () => Navigator.of(dialogCtx).pop(false),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white70,
-                        ),
-                        visualDensity: VisualDensity.compact,
+                        color: Colors.white70,
                       ),
                     ),
                   ],
@@ -1024,6 +1025,11 @@ class _PartitionSharedExpenseScreenState
   }) async {
     final settlementId = await _requestUtilityBillSettlement(billIds: billIds);
     await _utilityBillService.confirmBillSettlement(settlementId);
+    if (mounted) {
+      context.read<AlarmNavigationController>().registerBillSettlementConfirmedForAlarmUi(
+            settlementId,
+          );
+    }
     try {
       final detail =
           await _utilityBillService.fetchBillSettlementDetail(settlementId);
@@ -3411,17 +3417,8 @@ class _SharedExpenseSettlementFlowDialogState
                     ),
                   ),
                 ),
-                IconButton(
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
                 ),
               ],
             ),
@@ -3719,20 +3716,11 @@ class _SharedExpenseSettlementFlowDialogState
                     ),
                   ),
                 ),
-                IconButton(
+                PartitionModalCloseButton(
                   onPressed: _submittingSettlementRequest
                       ? null
                       : () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                    size: 22,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 40,
-                    height: 40,
-                  ),
+                  iconSize: 22,
                 ),
               ],
             ),
@@ -3942,17 +3930,8 @@ class _SharedExpenseSettlementFlowDialogState
                     ),
                   ),
                 ),
-                IconButton(
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
                 ),
               ],
             ),
@@ -4483,17 +4462,8 @@ class _UtilityBillSettlementFlowDialogState
                     ),
                   ),
                 ),
-                IconButton(
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
                 ),
               ],
             ),
@@ -4775,18 +4745,9 @@ class _UtilityBillSettlementFlowDialogState
                     ),
                   ),
                 ),
-                IconButton(
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                    size: 22,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 40,
-                    height: 40,
-                  ),
+                  iconSize: 22,
                 ),
               ],
             ),
@@ -4992,17 +4953,8 @@ class _UtilityBillSettlementFlowDialogState
                     ),
                   ),
                 ),
-                IconButton(
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
                 ),
               ],
             ),
@@ -5064,6 +5016,9 @@ class _UtilityBillSettlementFlowDialogState
                     r.settlementId,
                   );
                   if (!context.mounted) return;
+                  context.read<AlarmNavigationController>().registerBillSettlementConfirmedForAlarmUi(
+                        r.settlementId,
+                      );
                   widget.onFinished?.call();
                   Navigator.of(context).pop();
                   messenger.showSnackBar(
@@ -5575,12 +5530,8 @@ class _AiReceiptRecognitionFlowDialogState
                   ),
                 ),
               ),
-              IconButton(
+              PartitionModalCloseButton(
                 onPressed: _closeReceiptFlowDialog,
-                icon: Icon(Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9)),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
             ],
           ),
@@ -6024,12 +5975,8 @@ class _AiReceiptRecognitionFlowDialogState
                   ],
                 ),
               ),
-              IconButton(
+              PartitionModalCloseButton(
                 onPressed: _closeReceiptFlowDialog,
-                icon: Icon(Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9)),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
             ],
           ),
@@ -6227,11 +6174,9 @@ class _ReceiptExtractDatePickerDialogState
                   ),
                 ),
               ),
-              IconButton(
+              PartitionModalCloseButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                color: Colors.white70,
               ),
             ],
           ),

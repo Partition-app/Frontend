@@ -5,6 +5,7 @@ import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart'
 import 'package:partition_app/features/partition/services/calendar_service.dart';
 import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 
 /// 일정 등록 모달
 class ScheduleRegistrationModal extends StatefulWidget {
@@ -183,18 +184,8 @@ class _ScheduleRegistrationModalState extends State<ScheduleRegistrationModal> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: '닫기',
+                  PartitionModalCloseButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      color: Colors.white.withOpacity(0.9),
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 40,
-                      minHeight: 40,
-                    ),
                   ),
                 ],
               ),
@@ -503,11 +494,9 @@ class _ScheduleRegistrationDatePickerDialogState
                   ),
                 ),
               ),
-              IconButton(
+              PartitionModalCloseButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                color: Colors.white70,
               ),
             ],
           ),

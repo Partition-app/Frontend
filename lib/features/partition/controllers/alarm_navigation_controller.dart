@@ -22,9 +22,26 @@ class AlarmNavPending {
 class AlarmNavigationController extends ChangeNotifier {
   AlarmNavPending? _pending;
 
+  /// 공과금 정산 `settlementId` — 서버 알림 타입은 `REQUESTED`로 남아도 정산이 확정되면
+  /// [PartitionMainScreen] 알림 행 인디케이터를 체크로 표시하기 위한 클라이언트 기록.
+  final Set<int> _billSettlementConfirmedForAlarmUi = {};
+
   void setPending(AlarmNavPending value) {
     _pending = value;
     notifyListeners();
+  }
+
+  /// 공과금 정산이 확정된 것으로 확인되면 호출 (상세 조회 `isConfirmed` 또는 확정 API 성공).
+  void registerBillSettlementConfirmedForAlarmUi(int settlementId) {
+    if (settlementId <= 0) return;
+    if (_billSettlementConfirmedForAlarmUi.add(settlementId)) {
+      notifyListeners();
+    }
+  }
+
+  bool isBillSettlementConfirmedForAlarmUi(int? referenceId) {
+    if (referenceId == null || referenceId <= 0) return false;
+    return _billSettlementConfirmedForAlarmUi.contains(referenceId);
   }
 
   /// 한 번만 꺼냅니다. 없으면 `null`.

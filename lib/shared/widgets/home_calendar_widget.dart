@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:partition_app/shared/widgets/frosted_panel.dart';
+import 'package:partition_app/shared/widgets/glassmorphism_widget.dart';
 import 'package:partition_app/features/partition/services/calendar_service.dart';
 import 'package:partition_app/features/partition/services/chore_service.dart';
 import 'package:partition_app/features/partition/models/daily_calendar_response_model.dart';
@@ -1632,12 +1633,14 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
                 maxHeight: hasBoundedHeight ? constraints.maxHeight : null,
               );
 
-        return FrostedPanel(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            switchInCurve: Curves.easeInOut,
-            switchOutCurve: Curves.easeInOut,
-            child: child,
+        return RepaintBoundary(
+          child: FrostedPanel(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              switchInCurve: Curves.easeInOut,
+              switchOutCurve: Curves.easeInOut,
+              child: child,
+            ),
           ),
         );
       },
@@ -1863,8 +1866,9 @@ class _EventChip extends StatelessWidget {
     final showChoreCheckbox = onChoreCompleted != null;
     return ClipRRect(
       borderRadius: BorderRadius.circular(31.369),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      child: partitionGlassBlurBackdrop(
+        sigma: 8,
+        borderRadius: const BorderRadius.all(Radius.circular(31.369)),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: const BorderRadius.all(Radius.circular(31.369)),

@@ -272,10 +272,13 @@ class HomeShareProvider extends ChangeNotifier {
     );
 
     final bool wasNear = _isNearHome;
-    _isNearHome = dist <= home.radius;
+    final bool isNear = dist <= home.radius;
+    if (isNear == wasNear) return;
+
+    _isNearHome = isNear;
 
     // 집 반경에 처음 진입할 때만 알림 전송
-    if (_isNearHome && !wasNear) {
+    if (_isNearHome) {
       _maybeNotify();
     }
 

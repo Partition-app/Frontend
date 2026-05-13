@@ -1,5 +1,29 @@
-import 'package:flutter/material.dart';
 import 'dart:ui';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+
+/// 웹(CanvasKit)에서 [BackdropFilter]는 스크롤·리빌드 비용이 커서 단색 글래스로 대체합니다.
+Widget partitionGlassBlurBackdrop({
+  required Widget child,
+  double sigma = 10,
+  Color? fillColor,
+  BorderRadius? borderRadius,
+}) {
+  if (kIsWeb) {
+    return Container(
+      decoration: BoxDecoration(
+        color: fillColor ?? Colors.white.withOpacity(0.14),
+        borderRadius: borderRadius,
+      ),
+      child: child,
+    );
+  }
+  return BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+    child: child,
+  );
+}
 
 /// 글래스모피즘 효과를 적용한 위젯
 /// 재사용 가능한 컴포넌트
@@ -33,11 +57,16 @@ class GlassmorphismWidget extends StatelessWidget {
     /// width·height가 모두 있으면(모달 등) 내용을 꽉 채워 `Expanded`+스크롤이 유한 높이를 받게 함.
     final hasFixedSize = width != null && height != null;
 
-    final blurLayer = BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+    final double fillOpacity = kIsWeb
+        ? (backgroundOpacity + 0.1).clamp(0.12, 0.22).toDouble()
+        : backgroundOpacity.clamp(0, 1).toDouble();
+    final blurLayer = partitionGlassBlurBackdrop(
+      sigma: 10,
+      borderRadius: border,
+      fillColor: Colors.white.withOpacity(fillOpacity),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(backgroundOpacity.clamp(0, 1)),
+          color: Colors.white.withOpacity(fillOpacity),
           borderRadius: border,
         ),
       ),

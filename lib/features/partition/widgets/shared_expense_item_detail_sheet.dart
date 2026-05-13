@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:partition_app/features/partition/models/shared_expense_table_item.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 
 /// 공용소비 표 — 항목명 탭 시 상세(분류·AI 더미·정산 여부)
 class SharedExpenseItemDetailSheet extends StatefulWidget {
@@ -227,12 +228,8 @@ class _SharedExpenseItemDetailSheetState
                             ),
                           ),
                         ),
-                        IconButton(
+                        PartitionModalCloseButton(
                           onPressed: () => Navigator.of(context).pop(),
-                          icon: Icon(
-                            Icons.close_rounded,
-                            color: Colors.white.withOpacity(0.9),
-                          ),
                         ),
                       ],
                     ),

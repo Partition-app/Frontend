@@ -12,6 +12,7 @@ import 'package:partition_app/features/partition/utils/supply_purchase_input.dar
 import 'package:partition_app/shared/widgets/glassmorphic_date_picker.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_widget.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 
 /// 공용 소비·공과금 내역 관리 모달 (홈 집안일 자동 배정 모달과 동일 글래스 톤)
 class SharedExpenseManualModal extends StatefulWidget {
@@ -1089,16 +1090,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                   style: _titleStyle.copyWith(height: 1.15),
                 ),
               ),
-              IconButton(
-                tooltip: '닫기',
+              PartitionModalCloseButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                icon: Icon(
-                  Icons.close_rounded,
-                  color: Colors.white.withOpacity(0.88),
-                ),
-                padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 40, minHeight: 40),
+                color: Colors.white.withOpacity(0.88),
               ),
             ],
           )
@@ -1339,17 +1333,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                               ),
                             ),
                           ),
-                          IconButton(
+                          PartitionModalCloseButton(
                             onPressed: () => Navigator.pop(ctx),
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              color: Colors.white70,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 40,
-                              minHeight: 40,
-                            ),
+                            color: Colors.white70,
                           ),
                         ],
                       ),

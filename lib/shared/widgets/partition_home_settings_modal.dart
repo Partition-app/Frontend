@@ -13,6 +13,7 @@ import 'package:partition_app/features/auth/services/kakao_auth_service.dart';
 import 'package:partition_app/features/partition/theme/home_share_style.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 
 /// 홈 탭 「설정」— 그룹 리더 여부·그룹 코드·계정 관련 동작
 class PartitionHomeSettingsModal extends StatefulWidget {
@@ -131,18 +132,9 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: '닫기',
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(c).pop(false),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.88),
-                  ),
+                  color: Colors.white.withOpacity(0.88),
                 ),
               ],
             ),
@@ -532,16 +524,9 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
                             ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: '닫기',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                              minWidth: 40, minHeight: 40),
-                          icon: Icon(
-                            Icons.close_rounded,
-                            color: Colors.white.withOpacity(0.88),
-                          ),
+                        PartitionModalCloseButton(
                           onPressed: () => Navigator.of(context).pop(),
+                          color: Colors.white.withOpacity(0.88),
                         ),
                       ],
                     ),
@@ -791,15 +776,9 @@ class _SettingsSubdialogHeader extends StatelessWidget {
             ),
           ),
         ),
-        IconButton(
-          tooltip: '닫기',
+        PartitionModalCloseButton(
           onPressed: onClose,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          icon: Icon(
-            Icons.close_rounded,
-            color: Colors.white.withOpacity(0.88),
-          ),
+          color: Colors.white.withOpacity(0.88),
         ),
       ],
     );

@@ -36,7 +36,8 @@ enum AlarmNoticeType {
     return defaultMessage.isNotEmpty ? defaultMessage : (serverMessage ?? '');
   }
 
-  /// 정산 **완료** 알림 — 목록 체크 표시는 이 타입 + 읽음일 때만.
+  /// 정산 **완료** 알림 — 공동 구매는 읽음 + 이 타입일 때 체크.
+  /// 공과금은 `billSettlementConfirmed` 또는 클라이언트가 확인한 확정 정산번호도 체크(메인 패널).
   bool get isSettlementCompletionNotice =>
       this == AlarmNoticeType.supplySettlementConfirmed ||
       this == AlarmNoticeType.billSettlementConfirmed;

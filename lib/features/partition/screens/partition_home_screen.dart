@@ -16,6 +16,8 @@ import 'package:partition_app/shared/widgets/chore_assignment_modal.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/schedule_registration_modal.dart';
 import 'package:partition_app/shared/widgets/partition_home_settings_modal.dart';
+import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
+import 'package:partition_app/shared/widgets/glassmorphism_widget.dart';
 
 /// 귀가 공유 API(동의·집 위치·알림 전송) 실패 시 서버 메시지를 스낵바로 한 번 표시합니다.
 void _showHomeShareServerNoticeIfAny(BuildContext context) {
@@ -202,18 +204,8 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
                         ),
                       ),
                     ),
-                    IconButton(
-                      tooltip: '닫기',
+                    PartitionModalCloseButton(
                       onPressed: () => Navigator.of(ctx).pop(),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 40,
-                      ),
                     ),
                   ],
                 ),
@@ -314,12 +306,14 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 26),
-            SizedBox(
-              width: double.infinity,
-              height: 382,
-              child: HomeCalendarWidget(
-                key: _calendarKey,
-                onDateSelected: _onDateSelected,
+            RepaintBoundary(
+              child: SizedBox(
+                width: double.infinity,
+                height: 382,
+                child: HomeCalendarWidget(
+                  key: _calendarKey,
+                  onDateSelected: _onDateSelected,
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -341,9 +335,11 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
               onPressed: () => _showSettingsModal(context),
             ),
             const SizedBox(height: 12),
-            _HomeShareCard(
-              onToggle: () => _onToggleSharing(context),
-              onEditLocation: () => _onEditHomeLocation(context),
+            RepaintBoundary(
+              child: _HomeShareCard(
+                onToggle: () => _onToggleSharing(context),
+                onEditLocation: () => _onEditHomeLocation(context),
+              ),
             ),
             const SizedBox(height: 20),
           ],
@@ -395,6 +391,31 @@ class _PartitionGlassModalCard extends StatelessWidget {
 // 귀가 공유 토글 카드
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _HomeShareUiState {
+  const _HomeShareUiState({
+    required this.enabled,
+    required this.nearHome,
+    required this.loading,
+    required this.hasHome,
+  });
+
+  final bool enabled;
+  final bool nearHome;
+  final bool loading;
+  final bool hasHome;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _HomeShareUiState &&
+      enabled == other.enabled &&
+      nearHome == other.nearHome &&
+      loading == other.loading &&
+      hasHome == other.hasHome;
+
+  @override
+  int get hashCode => Object.hash(enabled, nearHome, loading, hasHome);
+}
+
 class _HomeShareCard extends StatelessWidget {
   const _HomeShareCard({
     required this.onToggle,
@@ -406,12 +427,44 @@ class _HomeShareCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<HomeShareProvider>();
-    final bool enabled = provider.isEnabled;
-    final bool nearHome = provider.isNearHome;
-    final bool loading = provider.isLoading;
-    final bool hasHome = provider.homeLocation != null;
+    return Selector<HomeShareProvider, _HomeShareUiState>(
+      selector: (_, provider) => _HomeShareUiState(
+        enabled: provider.isEnabled,
+        nearHome: provider.isNearHome,
+        loading: provider.isLoading,
+        hasHome: provider.homeLocation != null,
+      ),
+      builder: (context, state, _) => _HomeShareCardBody(
+        enabled: state.enabled,
+        nearHome: state.nearHome,
+        loading: state.loading,
+        hasHome: state.hasHome,
+        onToggle: onToggle,
+        onEditLocation: onEditLocation,
+      ),
+    );
+  }
+}
 
+class _HomeShareCardBody extends StatelessWidget {
+  const _HomeShareCardBody({
+    required this.enabled,
+    required this.nearHome,
+    required this.loading,
+    required this.hasHome,
+    required this.onToggle,
+    required this.onEditLocation,
+  });
+
+  final bool enabled;
+  final bool nearHome;
+  final bool loading;
+  final bool hasHome;
+  final VoidCallback onToggle;
+  final VoidCallback onEditLocation;
+
+  @override
+  Widget build(BuildContext context) {
     final Color accentColor = !enabled
         ? Colors.white.withOpacity(0.5)
         : (nearHome
@@ -420,8 +473,9 @@ class _HomeShareCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+      child: partitionGlassBlurBackdrop(
+        sigma: 14,
+        borderRadius: BorderRadius.circular(20),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
@@ -706,19 +760,10 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: '닫기',
+                PartitionModalCloseButton(
                   onPressed:
                       _loading ? null : () => Navigator.of(context).pop(false),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(_loading ? 0.35 : 0.9),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
+                  color: Colors.white.withOpacity(_loading ? 0.35 : 0.9),
                 ),
               ],
             ),
@@ -1048,18 +1093,8 @@ class _HomeLocationChangeDialogState extends State<_HomeLocationChangeDialog> {
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: '닫기',
+                PartitionModalCloseButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 40,
-                    minHeight: 40,
-                  ),
                 ),
               ],
             ),

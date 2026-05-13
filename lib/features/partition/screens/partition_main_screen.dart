@@ -647,6 +647,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   }
 
   Widget _buildNotificationBody() {
+    context.watch<AlarmNavigationController>();
     if (_alarmLoading && _alarms.isEmpty && _alarmError == null) {
       return Center(
         child: SizedBox(
@@ -875,6 +876,34 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   }
 
   Widget _buildAlarmLeadingIndicator(AlarmItem item) {
+    final alarmNav = context.read<AlarmNavigationController>();
+    final showBillConfirmedLead =
+        item.type == AlarmNoticeType.billSettlementConfirmed ||
+            (item.type == AlarmNoticeType.billSettlementRequested &&
+                alarmNav.isBillSettlementConfirmedForAlarmUi(item.referenceId));
+
+    Widget checkLead() => Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withOpacity(0.16),
+              width: 0.7,
+            ),
+            color: Colors.white.withOpacity(0.04),
+          ),
+          child: Icon(
+            Icons.check_rounded,
+            size: 12,
+            color: Colors.white.withOpacity(0.62),
+          ),
+        );
+
+    if (showBillConfirmedLead) {
+      return checkLead();
+    }
+
     if (!item.isRead) {
       return Container(
         width: 10,
@@ -895,25 +924,9 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
       );
     }
 
-    // 체크는 정산 완료 알림을 읽었을 때만 (요청 알림 읽음 ≠ 정산 완료).
+    // 공동 구매 정산 완료 알림: 읽음 + 완료 타입일 때만 체크.
     if (item.type.isSettlementCompletionNotice) {
-      return Container(
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withOpacity(0.16),
-            width: 0.7,
-          ),
-          color: Colors.white.withOpacity(0.04),
-        ),
-        child: Icon(
-          Icons.check_rounded,
-          size: 12,
-          color: Colors.white.withOpacity(0.62),
-        ),
-      );
+      return checkLead();
     }
 
     return SizedBox(
