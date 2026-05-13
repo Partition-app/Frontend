@@ -581,6 +581,24 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
     }
   }
 
+  Future<void> _onPullToRefresh() async {
+    if (!_shouldUseLiveReportApi(context)) {
+      if (!mounted) return;
+      setState(() {
+        _choreItems = List<_ChoreReportItem>.from(_kReportDummyChoreItems);
+        _chorePageIndex = 0;
+      });
+      if (_chorePageController.hasClients) {
+        _chorePageController.jumpToPage(0);
+      }
+      return;
+    }
+    await Future.wait<void>([
+      _loadReport(),
+      _loadSettlementReport(),
+    ]);
+  }
+
   @override
   void dispose() {
     _chorePageController.dispose();
@@ -725,31 +743,36 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
                   (symmetricPadFull * _chipVerticalSpacingScale)
                       .clamp(12.0, 88.0);
 
-              return ListView(
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
+              return RefreshIndicator(
+                onRefresh: _onPullToRefresh,
+                color: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.15),
+                child: ListView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    _contentPaddingHorizontal,
+                    0,
+                    _contentPaddingHorizontal,
+                    scrollBottomPadding,
+                  ),
+                  children: [
+                    SizedBox(height: symmetricPad + 3),
+                    _buildGlobalDateRow(),
+                    SizedBox(height: symmetricPad + 3),
+                    _buildChoreSection(),
+                    const SizedBox(height: _reportSectionGap),
+                    _buildConsumptionSection(),
+                    const SizedBox(height: _reportSectionGap),
+                    _buildReservationSection(),
+                    const SizedBox(height: _reportSectionGap),
+                    _buildSettlementSection(),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(
-                  _contentPaddingHorizontal,
-                  0,
-                  _contentPaddingHorizontal,
-                  scrollBottomPadding,
-                ),
-                children: [
-                  SizedBox(height: symmetricPad + 3),
-                  _buildGlobalDateRow(),
-                  SizedBox(height: symmetricPad + 3),
-                  _buildChoreSection(),
-                  const SizedBox(height: _reportSectionGap),
-                  _buildConsumptionSection(),
-                  const SizedBox(height: _reportSectionGap),
-                  _buildReservationSection(),
-                  const SizedBox(height: _reportSectionGap),
-                  _buildSettlementSection(),
-                  const SizedBox(height: 16),
-                ],
               );
             },
           ),

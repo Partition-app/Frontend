@@ -756,6 +756,28 @@ class _PartitionSharedExpenseScreenState
     }
   }
 
+  Future<void> _onPullToRefresh() async {
+    final useDummy = usePartitionDummyData(
+      Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+    );
+    if (useDummy) {
+      if (!mounted) return;
+      setState(() {
+        _goodsExpenseItems = List<SharedExpenseTableItem>.from(
+            _dummyItemsForSharedExpenseTable(0));
+        _utilityExpenseItems = List<SharedExpenseTableItem>.from(
+            _dummyItemsForSharedExpenseTable(1));
+        _clampTablePageIndex();
+      });
+      _scheduleTablePageJump();
+      return;
+    }
+    await Future.wait<void>([
+      _loadGoodsPurchases(),
+      _loadUtilityBills(),
+    ]);
+  }
+
   /// 연필 모달 닫은 뒤: GET으로 맞추되, 새로 등록·수정한 행은 응답에 없으면 모달 상태를 합침 (빈 배열 필터 버그 등 대비).
   Future<void> _syncUtilityExpenseItemsAfterManualModal(
     List<SharedExpenseTableItem> modalItems,
@@ -1343,27 +1365,32 @@ class _PartitionSharedExpenseScreenState
                   ((symmetricPad + _anchorVerticalInsetBonus) * 0.7)
                       .clamp(8.0, 64.0);
 
-              return ListView(
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
+              return RefreshIndicator(
+                onRefresh: _onPullToRefresh,
+                color: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.15),
+                child: ListView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    _contentPaddingHorizontal,
+                    0,
+                    _contentPaddingHorizontal,
+                    scrollBottomPadding,
+                  ),
+                  children: [
+                    SizedBox(height: anchorVerticalInset),
+                    _buildFilterChips(),
+                    SizedBox(height: anchorVerticalInset),
+                    _buildMainCard(),
+                    const SizedBox(height: _betweenMainCardAndActions),
+                    ..._buildActionButtons(),
+                    const SizedBox(height: _scrollListTailGap),
+                  ],
                 ),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(
-                  _contentPaddingHorizontal,
-                  0,
-                  _contentPaddingHorizontal,
-                  scrollBottomPadding,
-                ),
-                children: [
-                  SizedBox(height: anchorVerticalInset),
-                  _buildFilterChips(),
-                  SizedBox(height: anchorVerticalInset),
-                  _buildMainCard(),
-                  const SizedBox(height: _betweenMainCardAndActions),
-                  ..._buildActionButtons(),
-                  const SizedBox(height: _scrollListTailGap),
-                ],
               );
             },
           ),

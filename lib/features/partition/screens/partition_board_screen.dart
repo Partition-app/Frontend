@@ -307,6 +307,22 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     }
   }
 
+  Future<void> _onPullToRefresh() async {
+    final useDummy = usePartitionDummyData(
+      Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+    );
+    if (useDummy) {
+      if (!mounted) return;
+      setState(() {
+        _reservationRows = _buildDummyReservationRows();
+        _pageIndex = 0;
+      });
+      _schedulePageJump();
+      return;
+    }
+    await _loadReservationBoardSources();
+  }
+
   @override
   void dispose() {
     _reservationEndCountdownTimer?.cancel();
@@ -391,23 +407,28 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
       children: [
         _buildHeader(),
         Expanded(
-          child: ListView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
+          child: RefreshIndicator(
+            onRefresh: _onPullToRefresh,
+            color: Colors.white,
+            backgroundColor: Colors.white.withOpacity(0.15),
+            child: ListView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                _contentPaddingHorizontal,
+                _spacingMedium,
+                _contentPaddingHorizontal,
+                scrollBottomPadding,
+              ),
+              children: [
+                _buildMainCard(),
+                const SizedBox(height: _spacingSmall),
+                ..._buildActionButtons(),
+                const SizedBox(height: 12),
+              ],
             ),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(
-              _contentPaddingHorizontal,
-              _spacingMedium,
-              _contentPaddingHorizontal,
-              scrollBottomPadding,
-            ),
-            children: [
-              _buildMainCard(),
-              const SizedBox(height: _spacingSmall),
-              ..._buildActionButtons(),
-              const SizedBox(height: 12),
-            ],
           ),
         ),
       ],
