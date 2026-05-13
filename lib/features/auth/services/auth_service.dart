@@ -247,98 +247,27 @@ class AuthService {
     }
   }
 
-  /// 회원 탈퇴(계정 삭제).
-  /// 현재 배포 서버 기준 `DELETE /users/me`를 우선 시도하고,
-  /// 서버가 신 경로만 열어둔 경우 `POST /users/me/withdraw`로 폴백합니다.
+  /// 회원 탈퇴 — `POST /users/me/withdraw` (본문 없음 · `{}`).
+  ///
+  /// 성공: `isSuccess: true`, `result: null`.
+  /// 404 `USER_4001`, 400 `USER_4002`(그룹 리더는 위임 후 탈퇴) 등은 서버 `message`를 그대로 전달합니다.
   Future<void> deleteMyAccountOnServer() async {
     try {
-      final liveResponse = await _apiClient.delete(
-        AppConfig.updateUserNameEndpoint,
-        options: Options(
-          validateStatus: (status) =>
-              status != null &&
-              (status == 200 ||
-                  status == 204 ||
-                  status == 400 ||
-                  status == 401 ||
-                  status == 403 ||
-                  status == 404 ||
-                  status == 500),
-        ),
+      final response = await _apiClient.post(
+        AppConfig.userWithdrawEndpoint,
+        data: const <String, dynamic>{},
       );
-      if (liveResponse.statusCode == 200 || liveResponse.statusCode == 204) {
-        final data = liveResponse.data;
-        if (data is Map<String, dynamic> && data['isSuccess'] == false) {
-          final message = (data['message'] as String?)?.trim();
-          throw ApiException(
-            message:
-                message != null && message.isNotEmpty
-                    ? message
-                    : '회원 탈퇴에 실패했어요.',
-            statusCode: liveResponse.statusCode,
-          );
-        }
-        return;
-      }
-
-      if (liveResponse.statusCode != 404) {
-        final data = liveResponse.data;
-        final message =
-            data is Map<String, dynamic>
-                ? (data['message'] as String?)?.trim()
-                : null;
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['isSuccess'] == false) {
+        final message = (data['message'] as String?)?.trim();
         throw ApiException(
           message:
               message != null && message.isNotEmpty
                   ? message
                   : '회원 탈퇴에 실패했어요.',
-          statusCode: liveResponse.statusCode,
+          statusCode: response.statusCode,
         );
       }
-
-      final fallbackResponse = await _apiClient.post(
-        AppConfig.userWithdrawEndpoint,
-        data: null,
-        options: Options(
-          validateStatus: (status) =>
-              status != null &&
-              (status == 200 ||
-                  status == 204 ||
-                  status == 400 ||
-                  status == 401 ||
-                  status == 403 ||
-                  status == 404 ||
-                  status == 500),
-        ),
-      );
-      if (fallbackResponse.statusCode == 200 ||
-          fallbackResponse.statusCode == 204) {
-        final data = fallbackResponse.data;
-        if (data is Map<String, dynamic> && data['isSuccess'] == false) {
-          final message = (data['message'] as String?)?.trim();
-          throw ApiException(
-            message:
-                message != null && message.isNotEmpty
-                    ? message
-                    : '회원 탈퇴에 실패했어요.',
-            statusCode: fallbackResponse.statusCode,
-          );
-        }
-        return;
-      }
-
-      final fallbackData = fallbackResponse.data;
-      final fallbackMessage =
-          fallbackData is Map<String, dynamic>
-              ? (fallbackData['message'] as String?)?.trim()
-              : null;
-      throw ApiException(
-        message:
-            fallbackMessage != null && fallbackMessage.isNotEmpty
-                ? fallbackMessage
-                : '회원 탈퇴에 실패했어요.',
-        statusCode: fallbackResponse.statusCode,
-      );
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException.fromDioError(e);

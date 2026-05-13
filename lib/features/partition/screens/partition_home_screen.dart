@@ -44,6 +44,24 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     _calendarKey.currentState?.refreshCalendar();
   }
 
+  void _onPointerDownOutsideCalendar(PointerDownEvent event) {
+    final ctx = _calendarKey.currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final rect = origin & box.size;
+    if (rect.contains(event.position)) return;
+    _calendarKey.currentState?.collapseWeekDetailIfShowing();
+  }
+
+  Future<void> _onPullToRefresh() async {
+    _calendarKey.currentState?.refreshCalendar();
+    if (mounted) {
+      await context.read<HomeShareProvider>().initialize();
+    }
+  }
+
   void _showScheduleRegistrationModal(BuildContext context) {
     showDialog(
       context: context,
@@ -242,14 +260,22 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
       width: double.infinity,
       height: double.infinity,
       color: Colors.transparent,
-      child: SingleChildScrollView(
+      child: RefreshIndicator(
+        onRefresh: _onPullToRefresh,
+        color: Colors.white,
+        backgroundColor: Colors.white.withOpacity(0.15),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
           16,
           _contentTopOffset,
           16,
           scrollBottomPadding,
         ),
-        child: Column(
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _onPointerDownOutsideCalendar,
+          child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -295,6 +321,8 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
             const SizedBox(height: 20),
           ],
         ),
+        ),
+      ),
       ),
     );
   }

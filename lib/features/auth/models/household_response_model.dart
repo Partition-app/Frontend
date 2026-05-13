@@ -35,7 +35,8 @@ class HouseholdResponseModel {
 
 @JsonSerializable()
 class HouseholdResult {
-  final String? code; // 그룹 코드
+  /// 초대 코드. 서버는 `inviteCode` 또는 레거시 `code`로 줄 수 있음.
+  final String? code;
   final String? name; // 그룹명
   final int? id; // 그룹 ID
   final String? role; // 사용자 역할 (LEADER 등)
@@ -81,7 +82,8 @@ class HouseholdResult {
         (isLeader == null ? null : (isLeader ? 'LEADER' : 'MEMBER'));
 
     return HouseholdResult(
-      code: readString(['code', 'inviteCode', 'householdCode']),
+      // GET /households/me: inviteCode · 레거시: code / householdCode
+      code: readString(['inviteCode', 'code', 'householdCode']),
       name: readString(['name', 'householdName']),
       id: readInt(['id', 'householdId']),
       role: parsedRole,

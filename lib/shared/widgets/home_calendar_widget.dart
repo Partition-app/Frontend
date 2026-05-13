@@ -160,6 +160,15 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     }).toList();
   }
 
+  /// 주간·일정 세부 화면이 열려 있으면 월간 그리드로 접기 (홈에서 캘린더 바깥 탭 등)
+  void collapseWeekDetailIfShowing() {
+    if (!_showDetail) return;
+    if (!mounted) return;
+    setState(() {
+      _showDetail = false;
+    });
+  }
+
   /// 캘린더 데이터 강제 갱신 (외부에서 호출 가능)
   void refreshCalendar() {
     // 캐시 무효화
@@ -1540,24 +1549,17 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
       setState(() {
       final bool sameDetail =
           _detailDate != null && _detailDate!.year == date.year && _detailDate!.month == date.month && _detailDate!.day == date.day;
-      final bool sameSelected =
-          _selectedDate.year == date.year && _selectedDate.month == date.month && _selectedDate.day == date.day;
-      
-      // 같은 날짜를 다시 탭하면 주 뷰/월 뷰 전환
+
+      // 같은 날짜를 다시 탭하면 월 뷰로 접기 (바깥 탭과 동일한 결과)
       if (_showDetail && sameDetail) {
         _showDetail = false;
-      } else if (!_showDetail && sameSelected) {
-        // 월 뷰에서 같은 날짜를 다시 탭하면 주 뷰로 전환
-        _detailDate = date;
-        _showDetail = true;
       } else {
-        // 다른 날짜를 탭하면 선택만 업데이트 (월 뷰 유지)
+        // 한 번 탭으로 바로 주간·세부 화면
         _selectedDate = date;
         _detailDate = date;
-        // 주 뷰로 전환하지 않고 월 뷰에서 일정 표시
-        _showDetail = false;
+        _showDetail = true;
       }
-      
+
       if (date.month != _currentMonth.month) {
         _currentMonth = DateTime(date.year, date.month);
       }
