@@ -61,6 +61,8 @@ class _ReservationFormDialogOutcome {
 }
 
 
+const Duration _kMaxReservationDuration = Duration(hours: 5);
+
 List<List<T>> _paginateRows<T>(List<T> items, int pageSize) {
   if (items.isEmpty) {
     return [[]];
@@ -205,6 +207,7 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     final start = r.slotStart;
     final end = r.slotEnd;
     if (start == null || end == null) return r.end;
+    if (end.difference(start) > _kMaxReservationDuration) return r.end;
     final now = DateTime.now();
     if (now.isBefore(start) || !now.isBefore(end)) return r.end;
     return _formatCountdownToEnd(end, now);
@@ -799,7 +802,7 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         for (var i = 0; i < rows.length; i++)
           _buildReservationRow(
@@ -1502,20 +1505,27 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     return '${d.month}.${d.day} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<DateTime?> _pickDateTime(DateTime initial) async {
+  Future<DateTime?> _pickDateTime(
+    DateTime initial, {
+    DateTime? minDateTime,
+    DateTime? maxDateTime,
+  }) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final maxDate = today.add(const Duration(days: 365));
+    final defaultMaxDate = today.add(const Duration(days: 365));
     var init = initial;
-    if (init.isBefore(today)) init = today;
+    final floor = minDateTime ?? today;
+    final ceiling = maxDateTime ?? defaultMaxDate;
+    if (init.isBefore(floor)) init = floor;
+    if (init.isAfter(ceiling)) init = ceiling;
 
     final date = await showDialog<DateTime>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
       builder: (ctx) => GlassmorphicDatePicker(
         initialDate: init,
-        firstDate: today,
-        lastDate: maxDate,
+        firstDate: DateTime(floor.year, floor.month, floor.day),
+        lastDate: DateTime(ceiling.year, ceiling.month, ceiling.day),
         isStartDate: true,
       ),
     );
@@ -1543,13 +1553,33 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     );
     if (!mounted || tod == null) return null;
 
-    return DateTime(
+    var picked = DateTime(
       date.year,
       date.month,
       date.day,
       tod.hour,
       tod.minute,
     );
+    if (picked.isBefore(floor)) picked = floor;
+    if (picked.isAfter(ceiling)) picked = ceiling;
+    return picked;
+  }
+
+  DateTime get _minEndTime => _start.add(const Duration(minutes: 1));
+
+  DateTime get _maxEndTime => _start.add(_kMaxReservationDuration);
+
+  DateTime _clampEndTime(DateTime end) {
+    if (end.isBefore(_minEndTime)) return _minEndTime;
+    if (end.isAfter(_maxEndTime)) return _maxEndTime;
+    return end;
+  }
+
+  void _syncEndAfterStartChange() {
+    if (!_end.isAfter(_start)) {
+      _end = _start.add(const Duration(hours: 1));
+    }
+    _end = _clampEndTime(_end);
   }
 
   Future<void> _pickStart() async {
@@ -1557,18 +1587,30 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     if (d != null) {
       setState(() {
         _start = d;
-        if (!_end.isAfter(_start)) {
-          _end = _start.add(const Duration(minutes: 30));
-        }
+        _syncEndAfterStartChange();
       });
     }
   }
 
   Future<void> _pickEnd() async {
-    final base = _end.isAfter(_start) ? _end : _start.add(const Duration(minutes: 30));
-    final d = await _pickDateTime(base);
+    final base = _clampEndTime(
+      _end.isAfter(_start) ? _end : _start.add(const Duration(hours: 1)),
+    );
+    final d = await _pickDateTime(
+      base,
+      minDateTime: _minEndTime,
+      maxDateTime: _maxEndTime,
+    );
     if (d != null) {
-      setState(() => _end = d);
+      final clamped = _clampEndTime(d);
+      setState(() => _end = clamped);
+      if (clamped != d && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('종료 시간은 시작 시간으로부터 최대 5시간까지입니다.'),
+          ),
+        );
+      }
     }
   }
 
@@ -1576,6 +1618,14 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     if (!_end.isAfter(_start)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('종료 시간이 시작 시간보다 이후여야 합니다.')),
+      );
+      return;
+    }
+    if (_end.isAfter(_maxEndTime)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('종료 시간은 시작 시간으로부터 5시간 이내여야 합니다.'),
+        ),
       );
       return;
     }
