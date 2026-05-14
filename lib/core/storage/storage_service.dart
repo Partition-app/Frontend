@@ -218,6 +218,7 @@ class StorageService {
     } catch (_) {}
     await removeUserRole();
     await setUserRole('GUEST');
+    await setOnboardingCompleted(false);
   }
 
   /// JWT 만료 등 재로그인만 필요할 때 — 귀가 공유·집 위치 등 로컬 설정은 유지합니다.

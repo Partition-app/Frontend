@@ -22,7 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// 사용자 상태에 따라 적절한 라우트 반환.
   ///
   /// 새로고침 시 main.dart의 [_AuthWrapper]와 동일한 우선순위를 사용한다:
-  /// userRole(LEADER/MEMBER) → household 존재 → onboarding_completed 플래그 → 닉네임/그룹.
+  /// userRole(LEADER/MEMBER) → household 존재 → 닉네임 유무(그룹 선택/온보딩).
   Future<String> _getTargetRoute() async {
     final authService = AuthService();
 
@@ -53,27 +53,20 @@ class _LoginScreenState extends State<LoginScreen> {
       return AppRouter.partitionMain;
     }
 
-    final onboardingDone = await StorageService.isOnboardingCompleted();
-    if (onboardingDone) {
-      return AppRouter.partitionMain;
-    }
-
-    if (storedRole == 'GUEST') {
-      return AppRouter.onboardingSurvey;
-    }
-
-    final userInfo = await authService.getUserInfo();
-    String? userName = userInfo?.name;
+    String? userName = await StorageService.getUserName();
     if (userName == null || userName.isEmpty) {
-      userName = await StorageService.getUserName();
-      if (userName == null || userName.isEmpty) {
-        return AppRouter.onboardingSurvey; // 닉네임 입력 화면
+      final userInfo = await authService.getUserInfo();
+      userName = userInfo?.name;
+      if (userName != null && userName.isNotEmpty) {
+        await StorageService.setUserName(userName);
       }
-    } else {
-      await StorageService.setUserName(userName);
     }
 
-    return AppRouter.groupSelection; // 그룹 선택 화면
+    if (userName != null && userName.isNotEmpty) {
+      return AppRouter.groupSelection;
+    }
+
+    return AppRouter.onboardingSurvey;
   }
 
   Future<void> _handleKakaoLogin() async {
@@ -240,8 +233,10 @@ class _LoginScreenState extends State<LoginScreen> {
             }
             targetRoute = AppRouter.partitionMain;
           } else if (result.userRole == 'GUEST') {
-            // GUEST인 경우 온보딩으로 이동
-            targetRoute = AppRouter.onboardingSurvey;
+            final existingName = await StorageService.getUserName();
+            targetRoute = (existingName != null && existingName.isNotEmpty)
+                ? AppRouter.groupSelection
+                : AppRouter.onboardingSurvey;
           } else {
             // userRole이 없는 경우 기존 로직 사용
             targetRoute = await _getTargetRoute();
@@ -303,103 +298,112 @@ class _LoginScreenState extends State<LoginScreen> {
         Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const AuthFlowLogo(),
-                    const SizedBox(height: 20),
-                    Text.rich(
-                      TextSpan(
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontFamily: 'Pretendard Variable',
-                          height: 1.35,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const AuthFlowLogo(),
+                        const SizedBox(height: 20),
+                        Text.rich(
+                          TextSpan(
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontFamily: 'Pretendard Variable',
+                              height: 1.35,
+                            ),
+                            children: const [
+                              TextSpan(
+                                text: '파티션',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              TextSpan(
+                                text: ': 말하지 않아도 되는 공동생활 관리',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        children: const [
-                          TextSpan(
-                            text: '파티션',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          TextSpan(
-                            text: ': 말하지 않아도 되는 공동생활 관리',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 60),
-                    // 카카오 로그인 버튼 — 공식 에셋(아이콘·타이포 포함)
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 366),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _isKakaoLoginLoading ? null : _handleKakaoLogin,
-                            borderRadius: BorderRadius.circular(6),
-                            child: _isKakaoLoginLoading
-                                ? const SizedBox(
-                                    height: 55,
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            Color(0xFF000000),
+                        const SizedBox(height: 60),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 366),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _isKakaoLoginLoading
+                                    ? null
+                                    : _handleKakaoLogin,
+                                borderRadius: BorderRadius.circular(6),
+                                child: _isKakaoLoginLoading
+                                    ? const SizedBox(
+                                        height: 55,
+                                        child: Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                Color(0xFF000000),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Transform.translate(
+                                        offset: const Offset(0, -1),
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          child: Image.asset(
+                                            'assets/images/kakao_login_medium_wide.png',
+                                            width: double.infinity,
+                                            fit: BoxFit.fitWidth,
+                                            errorBuilder: (context, error,
+                                                stackTrace) {
+                                              return Container(
+                                                width: double.infinity,
+                                                height: 45,
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      const Color(0xFFFEE500),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                alignment: Alignment.center,
+                                                child: const Text(
+                                                  '카카오 로그인',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF000000),
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w500,
+                                                    height: 1.0,
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  )
-                                : Transform.translate(
-                                    offset: const Offset(0, -1),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Image.asset(
-                                        'assets/images/kakao_login_medium_wide.png',
-                                        width: double.infinity,
-                                        fit: BoxFit.fitWidth,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                          return Container(
-                                            width: double.infinity,
-                                            height: 45,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFFEE500),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            alignment: Alignment.center,
-                                            child: const Text(
-                                              '카카오 로그인',
-                                              style: TextStyle(
-                                                color: Color(0xFF000000),
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w500,
-                                                height: 1.0,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 200), // 하단 여백
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),

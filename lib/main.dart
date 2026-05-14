@@ -195,25 +195,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   /// 사용자 상태에 따라 적절한 라우트 반환
   ///
-  /// 웹 새로고침 시 로그인된 사용자가 안정적으로 홈에 도달하도록 다음 순서로 판별한다.
-  /// 1) 로컬에 저장된 [StorageService.getUserRole] (LEADER/MEMBER → 곧장 홈)
-  /// 2) 로컬 또는 서버 fallback의 가구(household) 소속 여부 (있으면 홈)
-  /// 3) `onboarding_completed` 플래그가 true이면 홈으로 간주
-  /// 4) 그래도 신규 사용자이면 닉네임 → 그룹 선택 순으로 온보딩
-  ///
-  /// 핵심 의도: "토큰이 살아 있으면 가능한 한 홈으로 보낸다"가 기본값이며,
-  /// GUEST(가구 미참여)인 경우에만 온보딩으로 우회한다.
+  /// 웹 새로고침 시 로그인된 사용자가 올바른 화면에 도달하도록 다음 순서로 판별한다.
+  /// 1) 로컬 [StorageService.getUserRole] (LEADER/MEMBER → 홈)
+  /// 2) 로컬·서버 가구(household) 소속 여부 (있으면 홈)
+  /// 3) 가구 없음 + 닉네임 있음 → 그룹 선택 (그룹 나가기 후 재접속 포함)
+  /// 4) 가구 없음 + 닉네임 없음 → 닉네임 온보딩
   Future<String> _getTargetRoute() async {
     final authService = AuthService();
 
-    // 1. 카카오 로그인 시 받았던 userRole — 가장 신뢰도 높은 신호
     final storedRole = StorageService.getUserRole();
     if (storedRole == 'LEADER' || storedRole == 'MEMBER') {
       await StorageService.setOnboardingCompleted(true);
       return AppRouter.partitionMain;
     }
 
-    // 2. 그룹(가구) 확인 — 로컬 우선, 없으면 서버에서 조회
     String? householdId = await StorageService.getHouseholdId();
     if (householdId == null || householdId.isEmpty) {
       final household = await authService.fetchMyHousehold();
@@ -235,29 +230,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return AppRouter.partitionMain;
     }
 
-    // 3. 과거에 온보딩을 마쳤던 흔적이 있으면 홈으로 (서버/네트워크 일시 실패 대비)
-    final onboardingDone = await StorageService.isOnboardingCompleted();
-    if (onboardingDone) {
-      return AppRouter.partitionMain;
-    }
-
-    // 4. 그래도 단서가 없으면 GUEST로 간주 — 닉네임 → 그룹 선택 순 온보딩
-    if (storedRole == 'GUEST') {
-      return AppRouter.onboardingSurvey;
-    }
-
-    final userInfo = await authService.getUserInfo();
-    String? userName = userInfo?.name;
+    String? userName = await StorageService.getUserName();
     if (userName == null || userName.isEmpty) {
-      userName = await StorageService.getUserName();
-      if (userName == null || userName.isEmpty) {
-        return AppRouter.onboardingSurvey; // 닉네임 입력 화면
+      final userInfo = await authService.getUserInfo();
+      userName = userInfo?.name;
+      if (userName != null && userName.isNotEmpty) {
+        await StorageService.setUserName(userName);
       }
-    } else {
-      await StorageService.setUserName(userName);
     }
 
-    return AppRouter.groupSelection; // 그룹 선택 화면
+    if (userName != null && userName.isNotEmpty) {
+      return AppRouter.groupSelection;
+    }
+
+    return AppRouter.onboardingSurvey;
   }
 
   @override
