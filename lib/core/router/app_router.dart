@@ -10,6 +10,7 @@ import 'package:partition_app/features/auth/screens/create_group_screen.dart';
 import 'package:partition_app/features/auth/screens/confirm_group_name_screen.dart';
 import 'package:partition_app/features/auth/screens/group_created_screen.dart';
 import 'package:partition_app/features/auth/screens/preference_survey_screen.dart';
+import 'package:partition_app/features/auth/auth_entry_route_resolver.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/partition/screens/partition_main_screen.dart';
@@ -137,6 +138,13 @@ class _AuthGuardState extends State<_AuthGuard> {
     if (mounted) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       await authProvider.checkAuthStatus();
+
+      final entryRoute = await AuthEntryRouteResolver.resolve();
+      if (!mounted) return;
+      if (entryRoute != AppRouter.partitionMain) {
+        Navigator.of(context).pushReplacementNamed(entryRoute);
+        return;
+      }
 
       setState(() {
         _sessionValid = true;

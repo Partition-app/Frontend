@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
+import 'package:partition_app/features/auth/auth_entry_route_resolver.dart';
 import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_button.dart';
 
@@ -30,10 +31,10 @@ class _GroupSelectionScreenState extends State<GroupSelectionScreen> {
     }
   }
 
-  /// 이미 그룹에 속해 있으면 홈으로 이동하고 true 반환, 아니면 false 반환
+  /// 서버 기준으로 이미 그룹에 속해 있으면 홈으로 이동하고 true 반환
   Future<bool> _redirectIfAlreadyInGroup() async {
-    final householdId = await StorageService.getHouseholdId();
-    if (householdId != null && householdId.isNotEmpty) {
+    final route = await AuthEntryRouteResolver.resolve();
+    if (route == AppRouter.partitionMain) {
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRouter.partitionMain);
       }

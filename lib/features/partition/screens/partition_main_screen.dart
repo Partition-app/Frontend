@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/core/push/fcm_registration_service.dart';
+import 'package:partition_app/core/router/app_router.dart';
+import 'package:partition_app/features/auth/auth_entry_route_resolver.dart';
 import 'package:partition_app/features/partition/controllers/alarm_navigation_controller.dart';
 import 'package:partition_app/features/partition/models/alarm_model.dart';
 import 'package:partition_app/features/partition/screens/partition_home_screen.dart';
@@ -273,6 +275,14 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
         FirebaseMessaging.onMessage.listen(_handleForegroundFcm);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+
+      // 다른 기기에서 그룹 나간 경우 등 — 서버 기준 소속 재확인
+      final entryRoute = await AuthEntryRouteResolver.resolve();
+      if (!mounted) return;
+      if (entryRoute != AppRouter.partitionMain) {
+        Navigator.of(context).pushNamedAndRemoveUntil(entryRoute, (_) => false);
+        return;
+      }
 
       // FCM 초기 메시지 처리
       if (!_initialFcmOpenHandled) {

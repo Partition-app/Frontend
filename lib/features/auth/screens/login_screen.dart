@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
+import 'package:partition_app/features/auth/auth_entry_route_resolver.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
-import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/services/kakao_auth_service.dart';
 import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
 import 'package:partition_app/shared/utils/debug_helper.dart';
@@ -18,56 +18,6 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isKakaoLoginLoading = false;
-
-  /// 사용자 상태에 따라 적절한 라우트 반환.
-  ///
-  /// 새로고침 시 main.dart의 [_AuthWrapper]와 동일한 우선순위를 사용한다:
-  /// userRole(LEADER/MEMBER) → household 존재 → 닉네임 유무(그룹 선택/온보딩).
-  Future<String> _getTargetRoute() async {
-    final authService = AuthService();
-
-    final storedRole = StorageService.getUserRole();
-    if (storedRole == 'LEADER' || storedRole == 'MEMBER') {
-      await StorageService.setOnboardingCompleted(true);
-      return AppRouter.partitionMain;
-    }
-
-    String? householdId = await StorageService.getHouseholdId();
-    if (householdId == null || householdId.isEmpty) {
-      final household = await authService.fetchMyHousehold();
-      if (household != null &&
-          household.isSuccess &&
-          household.result?.id != null) {
-        householdId = household.result!.id.toString();
-        await StorageService.setHouseholdId(householdId);
-      }
-    }
-
-    if (householdId != null && householdId.isNotEmpty) {
-      final userInfo = await authService.getUserInfo();
-      final name = userInfo?.name;
-      if (name != null && name.isNotEmpty) {
-        await StorageService.setUserName(name);
-      }
-      await StorageService.setOnboardingCompleted(true);
-      return AppRouter.partitionMain;
-    }
-
-    String? userName = await StorageService.getUserName();
-    if (userName == null || userName.isEmpty) {
-      final userInfo = await authService.getUserInfo();
-      userName = userInfo?.name;
-      if (userName != null && userName.isNotEmpty) {
-        await StorageService.setUserName(userName);
-      }
-    }
-
-    if (userName != null && userName.isNotEmpty) {
-      return AppRouter.groupSelection;
-    }
-
-    return AppRouter.onboardingSurvey;
-  }
 
   Future<void> _handleKakaoLogin() async {
     if (_isKakaoLoginLoading) return;
@@ -207,40 +157,16 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           }
         } else if (mounted) {
-          // userRole에 따라 적절한 화면으로 이동
-          String targetRoute;
-          if (result.userRole == 'LEADER' || result.userRole == 'MEMBER') {
-            // 새로고침 후에도 홈으로 라우팅되도록 핵심 플래그·이름 백업
-            await StorageService.setOnboardingCompleted(true);
-            final kakaoNickname =
-                user?.kakaoAccount?.profile?.nickname?.trim();
-            final existingName = await StorageService.getUserName();
-            if ((existingName == null || existingName.isEmpty) &&
-                kakaoNickname != null &&
-                kakaoNickname.isNotEmpty) {
-              await StorageService.setUserName(kakaoNickname);
-            }
-            // householdId가 로컬에 비어 있으면 서버에서 한번 시도 (best-effort)
-            final localHid = await StorageService.getHouseholdId();
-            if (localHid == null || localHid.isEmpty) {
-              try {
-                final hh = await AuthService().fetchMyHousehold();
-                final hid = hh?.result?.id;
-                if (hh != null && hh.isSuccess && hid != null) {
-                  await StorageService.setHouseholdId(hid.toString());
-                }
-              } catch (_) {}
-            }
-            targetRoute = AppRouter.partitionMain;
-          } else if (result.userRole == 'GUEST') {
-            final existingName = await StorageService.getUserName();
-            targetRoute = (existingName != null && existingName.isNotEmpty)
-                ? AppRouter.groupSelection
-                : AppRouter.onboardingSurvey;
-          } else {
-            // userRole이 없는 경우 기존 로직 사용
-            targetRoute = await _getTargetRoute();
+          final kakaoNickname =
+              user?.kakaoAccount?.profile?.nickname?.trim();
+          final existingName = await StorageService.getUserName();
+          if ((existingName == null || existingName.isEmpty) &&
+              kakaoNickname != null &&
+              kakaoNickname.isNotEmpty) {
+            await StorageService.setUserName(kakaoNickname);
           }
+
+          final targetRoute = await AuthEntryRouteResolver.resolve();
 
           if (!mounted) return;
           Navigator.of(context).pushReplacementNamed(targetRoute);

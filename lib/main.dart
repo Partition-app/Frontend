@@ -12,6 +12,7 @@ import 'package:partition_app/core/theme/app_theme.dart';
 import 'package:partition_app/core/providers/app_providers.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/debug/debug_home_screen.dart';
+import 'package:partition_app/features/auth/auth_entry_route_resolver.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 
@@ -180,7 +181,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // 인증 상태에 따라 네비게이션
       if (isAuth) {
         // 사용자 상태 확인 및 적절한 화면으로 이동
-        final targetRoute = await _getTargetRoute();
+        final targetRoute = await AuthEntryRouteResolver.resolve();
         if (mounted) {
           Navigator.of(context).pushReplacementNamed(targetRoute);
           unawaited(FcmRegistrationService.registerIfLoggedIn());
@@ -191,59 +192,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     }
-  }
-
-  /// 사용자 상태에 따라 적절한 라우트 반환
-  ///
-  /// 웹 새로고침 시 로그인된 사용자가 올바른 화면에 도달하도록 다음 순서로 판별한다.
-  /// 1) 로컬 [StorageService.getUserRole] (LEADER/MEMBER → 홈)
-  /// 2) 로컬·서버 가구(household) 소속 여부 (있으면 홈)
-  /// 3) 가구 없음 + 닉네임 있음 → 그룹 선택 (그룹 나가기 후 재접속 포함)
-  /// 4) 가구 없음 + 닉네임 없음 → 닉네임 온보딩
-  Future<String> _getTargetRoute() async {
-    final authService = AuthService();
-
-    final storedRole = StorageService.getUserRole();
-    if (storedRole == 'LEADER' || storedRole == 'MEMBER') {
-      await StorageService.setOnboardingCompleted(true);
-      return AppRouter.partitionMain;
-    }
-
-    String? householdId = await StorageService.getHouseholdId();
-    if (householdId == null || householdId.isEmpty) {
-      final household = await authService.fetchMyHousehold();
-      if (household != null &&
-          household.isSuccess &&
-          household.result?.id != null) {
-        householdId = household.result!.id.toString();
-        await StorageService.setHouseholdId(householdId);
-      }
-    }
-
-    if (householdId != null && householdId.isNotEmpty) {
-      final userInfo = await authService.getUserInfo();
-      final name = userInfo?.name;
-      if (name != null && name.isNotEmpty) {
-        await StorageService.setUserName(name);
-      }
-      await StorageService.setOnboardingCompleted(true);
-      return AppRouter.partitionMain;
-    }
-
-    String? userName = await StorageService.getUserName();
-    if (userName == null || userName.isEmpty) {
-      final userInfo = await authService.getUserInfo();
-      userName = userInfo?.name;
-      if (userName != null && userName.isNotEmpty) {
-        await StorageService.setUserName(userName);
-      }
-    }
-
-    if (userName != null && userName.isNotEmpty) {
-      return AppRouter.groupSelection;
-    }
-
-    return AppRouter.onboardingSurvey;
   }
 
   @override
