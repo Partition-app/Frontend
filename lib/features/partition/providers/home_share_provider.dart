@@ -17,11 +17,13 @@ import 'package:partition_app/features/partition/services/home_share_service.dar
 class HomeShareProvider extends ChangeNotifier {
   static const Duration _cooldown = Duration(minutes: 30);
   static const Duration _roommateNearHomeTtl = Duration(minutes: 30);
+  static const Duration _roommateNearHomePollInterval = Duration(seconds: 60);
   static const double _defaultRadius = 300.0;
 
   bool _isEnabled = false;
   bool _isNearHome = false;
   bool _roommateNearHome = false;
+  List<String> _nearHomeRoommateNames = const [];
   bool _isLoading = false;
 
   ({double lat, double lng, double radius})? _homeLocation;
@@ -29,6 +31,7 @@ class HomeShareProvider extends ChangeNotifier {
   DateTime? _lastNotifiedAt;
   StreamSubscription<Position>? _positionSub;
   Timer? _roommateNearHomeExpiryTimer;
+  Timer? _roommateNearHomePollTimer;
 
   final HomeShareService _service = HomeShareService();
 
@@ -50,8 +53,15 @@ class HomeShareProvider extends ChangeNotifier {
 
   bool get isEnabled => _isEnabled;
   bool get isNearHome => _isNearHome;
-  /// 다른 룸메이트의 집 근처 진입 FCM 수신 여부 (30분 TTL)
+  /// 다른 룸메이트의 집 근처 진입 여부 (FCM·서버 조회)
   bool get roommateNearHome => _roommateNearHome;
+  /// 집 근처에 있는 룸메이트 이름 (본인 제외)
+  List<String> get nearHomeRoommateNames => _nearHomeRoommateNames;
+  String get roommateNearHomeBannerText {
+    if (!_roommateNearHome) return '룸메이트가 집 근처에 없어요.';
+    if (_nearHomeRoommateNames.isEmpty) return '룸메이트가 집 근처에 있어요.';
+    return '${_nearHomeRoommateNames.join(', ')}님이 집 근처에 있어요.';
+  }
   bool get isLoading => _isLoading;
   ({double lat, double lng, double radius})? get homeLocation => _homeLocation;
   String? get homeAddress => _homeAddress;
@@ -77,7 +87,63 @@ class HomeShareProvider extends ChangeNotifier {
       await _startLocationWatch();
     }
     _restoreRoommateNearHomeFromStorage();
+    await refreshRoommateNearHomeFromServer();
+    _startRoommateNearHomePolling();
     notifyListeners();
+  }
+
+  /// GET `/households/location-events/near-home`으로 룸메이트 귀가 배너를 갱신합니다.
+  Future<void> refreshRoommateNearHomeFromServer() async {
+    try {
+      final statuses = await _service.fetchRoommateNearHomeStatus();
+      final myId = int.tryParse(await StorageService.getUserId() ?? '');
+      final nearOthers = statuses.where((s) {
+        if (!s.isNearHome) return false;
+        if (myId != null && myId > 0 && s.userId == myId) return false;
+        return true;
+      }).toList();
+      _setRoommateNearHomeFromServer(
+        near: nearOthers.isNotEmpty,
+        names: nearOthers.map((s) => s.name).where((n) => n.isNotEmpty).toList(),
+      );
+    } on ApiException catch (e) {
+      debugPrint('[HomeShare] 룸메이트 귀가 현황 조회 실패: $e');
+    }
+  }
+
+  void _startRoommateNearHomePolling() {
+    _roommateNearHomePollTimer?.cancel();
+    _roommateNearHomePollTimer = Timer.periodic(
+      _roommateNearHomePollInterval,
+      (_) => unawaited(refreshRoommateNearHomeFromServer()),
+    );
+  }
+
+  void _setRoommateNearHomeFromServer({
+    required bool near,
+    required List<String> names,
+  }) {
+    final namesChanged = !_listEquals(_nearHomeRoommateNames, names);
+    if (_roommateNearHome == near && !namesChanged) return;
+
+    _roommateNearHome = near;
+    _nearHomeRoommateNames = List.unmodifiable(names);
+
+    if (near) {
+      unawaited(StorageService.setRoommateNearHomeAt(DateTime.now()));
+      _scheduleRoommateNearHomeExpiry();
+    } else {
+      _roommateNearHomeExpiryTimer?.cancel();
+    }
+    notifyListeners();
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// FCM `NEAR_HOME_ARRIVAL` 수신 시 알림 패널 상단 배너를 갱신합니다.
@@ -85,6 +151,7 @@ class HomeShareProvider extends ChangeNotifier {
     _roommateNearHome = true;
     unawaited(StorageService.setRoommateNearHomeAt(DateTime.now()));
     _scheduleRoommateNearHomeExpiry();
+    unawaited(refreshRoommateNearHomeFromServer());
     notifyListeners();
   }
 
@@ -343,6 +410,7 @@ class HomeShareProvider extends ChangeNotifier {
   @override
   void dispose() {
     _roommateNearHomeExpiryTimer?.cancel();
+    _roommateNearHomePollTimer?.cancel();
     _stopLocationWatch();
     super.dispose();
   }

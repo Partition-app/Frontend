@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:kakao_flutter_sdk_auth/kakao_flutter_sdk_auth.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
 /// 카카오 로그인 서비스
@@ -95,6 +96,19 @@ class KakaoAuthService {
       return user?.kakaoAccount?.emailNeedsAgreement ?? false;
     } catch (error) {
       return false;
+    }
+  }
+
+  /// 저장된 카카오 액세스 토큰 (서버 JWT 재발급용)
+  static Future<String?> getStoredAccessToken() async {
+    try {
+      if (!await AuthApi.instance.hasToken()) return null;
+      final token = await TokenManagerProvider.instance.manager.getToken();
+      final access = token?.accessToken;
+      if (access == null || access.isEmpty) return null;
+      return access;
+    } catch (_) {
+      return null;
     }
   }
 

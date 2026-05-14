@@ -202,7 +202,7 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
     if (!ok || !mounted) return;
 
     try {
-      await _authService.leaveHouseholdAsMember();
+      await _authService.leaveHouseholdAndSyncSession();
     } catch (e) {
       if (!ctx.mounted) return;
       final msg = e is ApiException ? e.message : '그룹 나가기에 실패했어요.';
@@ -210,7 +210,6 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
       return;
     }
 
-    await StorageService.clearHouseholdAffiliation();
     if (!ctx.mounted) return;
     Navigator.of(ctx, rootNavigator: true).pushNamedAndRemoveUntil(
       AppRouter.groupSelection,
@@ -219,18 +218,29 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
   }
 
   Future<void> _onDeleteAccount(BuildContext ctx) async {
+    if (_isLeader) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '그룹 리더는 탈퇴할 수 없어요. 그룹장을 위임한 후 탈퇴해 주세요.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final ok =
         await _confirm(ctx,
             title: '회원 탈퇴',
-            message: '계정과 연결된 정보가 삭제될 수 있어요.\n계속 진행할까요?',
+            message:
+                '계정이 탈퇴 처리되며, 그룹에 남아 있는 데이터는 삭제되지 않아요.\n계속 진행할까요?',
             confirmLabel: '탈퇴',
             destructive: true);
     if (!ok || !mounted) return;
 
     try {
-      await _authService.deleteMyAccountOnServer();
-      if (!ctx.mounted) return;
-      await ctx.read<AuthProvider>().logout();
+      await ctx.read<AuthProvider>().withdrawAccount();
     } catch (e) {
       if (!ctx.mounted) return;
       final msg = e is ApiException ? e.message : '회원 탈퇴에 실패했어요.';

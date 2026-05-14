@@ -92,7 +92,9 @@ class _EnterGroupCodeScreenState extends State<EnterGroupCodeScreen> {
         } else if (errorString.contains('400') || errorString.contains('잘못된')) {
           errorMessage = '잘못된 그룹 코드입니다.';
         } else if (errorString.contains('403') || errorString.contains('권한')) {
-          errorMessage = '그룹 참여 권한이 없습니다.';
+          errorMessage =
+              '그룹 참여가 거부되었어요. 나간 직후라면 잠시 후 다시 시도하거나, '
+              '로그아웃 후 다시 로그인해 주세요. 계속되면 문의를 남겨주세요.';
         } else if (errorString.contains('409') || errorString.contains('이미')) {
           errorMessage = '이미 해당 그룹에 참여 중입니다.';
         }

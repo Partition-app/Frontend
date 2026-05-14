@@ -6,7 +6,7 @@ import 'package:partition_app/core/network/api_exception.dart';
 /// 귀가 공유 — 집 근처 도착 이벤트 전송 및 위치 공유 동의 관리
 ///
 /// Spring API: `POST·GET /households/location-consent`, `POST·GET /households/home-loc`,
-/// `POST /households/location-events/near-home` ([AppConfig] baseUrl에 `/api` 포함).
+/// `POST·GET /households/location-events/near-home` ([AppConfig] baseUrl에 `/api` 포함).
 class HomeShareService {
   final ApiClient _apiClient = ApiClient();
 
@@ -77,6 +77,25 @@ class HomeShareService {
     return code == 'HOUSEHOLD_4005';
   }
 
+  static bool _isHouseholdNotFound(dynamic data) {
+    if (data is! Map<String, dynamic>) return false;
+    return data['code']?.toString() == 'HOUSEHOLD_4001';
+  }
+
+  /// GET `/households/location-events/near-home` — 룸메이트별 집 근처 여부.
+  Future<List<RoommateNearHomeStatus>> fetchRoommateNearHomeStatus() async {
+    try {
+      final response = await _apiClient.get(AppConfig.nearHomeEventEndpoint);
+      return RoommateNearHomeStatus.listFromResponseBody(response.data);
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      if (e.response?.statusCode == 404 || _isHouseholdNotFound(body)) {
+        return const [];
+      }
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   /// 집 위치(위도·경도·반경 m)를 서버에 저장합니다.
   Future<void> saveHomeLocation({
     required double lat,
@@ -126,6 +145,51 @@ class HomeShareService {
     }
   }
 
+}
+
+/// 룸메이트 귀가 현황 GET 응답 항목.
+class RoommateNearHomeStatus {
+  const RoommateNearHomeStatus({
+    required this.userId,
+    required this.name,
+    required this.isNearHome,
+  });
+
+  final int userId;
+  final String name;
+  final bool isNearHome;
+
+  static List<RoommateNearHomeStatus> listFromResponseBody(dynamic data) {
+    if (data is! Map<String, dynamic>) {
+      throw ApiException(message: '룸메이트 귀가 현황 응답 형식이 올바르지 않습니다.');
+    }
+    if (data['isSuccess'] != true) {
+      if (HomeShareService._isHouseholdNotFound(data)) return const [];
+      throw ApiException(
+        message:
+            data['message']?.toString() ?? '룸메이트 귀가 현황 조회에 실패했습니다.',
+      );
+    }
+    final result = data['result'];
+    if (result == null) return const [];
+    if (result is! List) {
+      throw ApiException(message: '룸메이트 귀가 현황 결과 형식이 올바르지 않습니다.');
+    }
+    final out = <RoommateNearHomeStatus>[];
+    for (final item in result) {
+      if (item is! Map<String, dynamic>) continue;
+      final userId = (item['userId'] as num?)?.toInt();
+      if (userId == null) continue;
+      out.add(
+        RoommateNearHomeStatus(
+          userId: userId,
+          name: item['name']?.toString() ?? '',
+          isNearHome: item['isNearHome'] == true,
+        ),
+      );
+    }
+    return out;
+  }
 }
 
 /// 집 위치 GET 응답을 로컬 동기화용으로 줄인 결과.

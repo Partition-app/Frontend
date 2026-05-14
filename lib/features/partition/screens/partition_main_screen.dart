@@ -129,6 +129,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
     try {
       final result = await _alarmService.fetchMyAlarms();
       if (!mounted || gen != _alarmFetchGeneration) return;
+      unawaited(context.read<HomeShareProvider>().refreshRoommateNearHomeFromServer());
       setState(() {
         _alarms = result.alarms;
         _alarmUnreadCount = result.unreadCount;
@@ -680,21 +681,28 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
 
   Widget _buildNotificationBody() {
     context.watch<AlarmNavigationController>();
-    final roommateNearHome = context.watch<HomeShareProvider>().roommateNearHome;
+    final homeShare = context.watch<HomeShareProvider>();
+    final roommateNearHome = homeShare.roommateNearHome;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: _buildRoommateNearHomeBanner(nearHome: roommateNearHome),
+          child: _buildRoommateNearHomeBanner(
+            nearHome: roommateNearHome,
+            bannerText: homeShare.roommateNearHomeBannerText,
+          ),
         ),
         Expanded(child: _buildAlarmListBody()),
       ],
     );
   }
 
-  Widget _buildRoommateNearHomeBanner({required bool nearHome}) {
+  Widget _buildRoommateNearHomeBanner({
+    required bool nearHome,
+    required String bannerText,
+  }) {
     final accent = nearHome
         ? HomeShareStyle.point
         : Colors.white.withOpacity(0.72);
@@ -734,9 +742,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                nearHome
-                    ? '룸메이트가 집 근처에 있어요.'
-                    : '룸메이트가 집 근처에 없어요.',
+                bannerText,
                 style: TextStyle(
                   color: accent,
                   fontSize: 15,

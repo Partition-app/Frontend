@@ -134,7 +134,7 @@ class AppConfig {
   static const String locationConsentEndpoint = '/households/location-consent';
   /// 집 위치 저장(POST)·조회(GET). 조회 명세 경로 `/api/households/home-loc`
   static const String homeLocationEndpoint = '/households/home-loc';
-  /// 집 근처 진입 이벤트 전송 (POST `{ eventType: "entered_home_area" }`)
+  /// 집 근처 진입 이벤트 — POST 전송 · GET 룸메이트 귀가 현황 조회
   static const String nearHomeEventEndpoint = '/households/location-events/near-home';
 
   // 로컬 저장소 키

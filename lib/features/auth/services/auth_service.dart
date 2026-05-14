@@ -13,6 +13,7 @@ import 'package:partition_app/features/auth/models/update_name_response_model.da
 import 'package:partition_app/features/auth/models/household_response_model.dart';
 import 'package:partition_app/features/auth/models/preference_response_model.dart';
 import 'package:partition_app/features/auth/services/user_service.dart';
+import 'package:partition_app/features/auth/services/kakao_auth_service.dart';
 
 /// 하우스 멤버 (`POST /supplies/settlement`의 `memberIds` 등)
 class HouseholdMemberBrief {
@@ -261,13 +262,28 @@ class AuthService {
     }
   }
 
-  /// 회원 탈퇴 — `POST /users/me/withdraw` (본문 없음).
+  /// 회원 탈퇴 — `POST /api/users/me/withdraw` (본문 없음, soft delete).
   Future<void> deleteMyAccountOnServer() => _userService.withdraw();
 
   /// 그룹(가구) 참여
   Future<HouseholdResponseModel> joinHousehold({
     required String inviteCode,
   }) async {
+    try {
+      return await _postJoinHousehold(inviteCode);
+    } on ApiException catch (e) {
+      // 나가기 직후 등 서버 JWT·권한 불일치 시 카카오로 JWT 재발급 후 1회 재시도
+      if (e.statusCode == 403) {
+        final refreshed = await reissueJwtFromKakaoSession();
+        if (refreshed) {
+          return await _postJoinHousehold(inviteCode);
+        }
+      }
+      rethrow;
+    }
+  }
+
+  Future<HouseholdResponseModel> _postJoinHousehold(String inviteCode) async {
     try {
       final response = await _apiClient.post(
         AppConfig.householdsJoinEndpoint,
@@ -280,6 +296,26 @@ class AuthService {
     } catch (e) {
       throw ApiException.fromDioError(e);
     }
+  }
+
+  /// 카카오 세션이 살아 있으면 `POST /auth/kakao`로 서버 JWT를 다시 받습니다.
+  Future<bool> reissueJwtFromKakaoSession() async {
+    final kakaoToken = await KakaoAuthService.getStoredAccessToken();
+    if (kakaoToken == null || kakaoToken.isEmpty) return false;
+    try {
+      await loginWithKakao(kakaoAccessToken: kakaoToken);
+      return true;
+    } catch (e) {
+      debugPrint('[AuthService] JWT 재발급 실패: $e');
+      return false;
+    }
+  }
+
+  /// 그룹 나가기 후 로컬·JWT 상태를 서버와 맞춥니다.
+  Future<void> leaveHouseholdAndSyncSession() async {
+    await leaveHouseholdAsMember();
+    await StorageService.clearHouseholdAffiliation();
+    await reissueJwtFromKakaoSession();
   }
 
   /// 선호도 등록
