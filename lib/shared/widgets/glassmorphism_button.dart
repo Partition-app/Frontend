@@ -125,14 +125,14 @@ class GlassmorphismInputField extends StatelessWidget {
     this.onChanged,
     this.autofocus = false,
     this.width = 183,
-    this.height = 31,
+    this.height = 47,
   });
-
-  static const double _textNudgeY = -0.5;
 
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(PartitionUiTokens.fieldRadius);
+    final verticalPad =
+        ((height - PartitionUiTokens.bodyFontSize) / 2).clamp(0.0, height / 2);
     return Container(
       width: width,
       height: height,
@@ -156,8 +156,7 @@ class GlassmorphismInputField extends StatelessWidget {
         borderRadius: radius,
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Transform.translate(
-            offset: const Offset(0, _textNudgeY),
+          child: Center(
             child: TextField(
               controller: controller,
               onChanged: onChanged,
@@ -168,14 +167,13 @@ class GlassmorphismInputField extends StatelessWidget {
                 fontSize: PartitionUiTokens.bodyFontSize,
                 height: 1.0,
               ),
-              strutStyle: const StrutStyle(
-                fontSize: PartitionUiTokens.bodyFontSize,
-                height: 1.0,
-                forceStrutHeight: true,
-              ),
               decoration: InputDecoration(
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                isCollapsed: false,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: verticalPad,
+                ),
                 border: InputBorder.none,
                 hintText: hintText,
                 hintStyle: TextStyle(

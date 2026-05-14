@@ -237,14 +237,26 @@ class AuthService {
     }
   }
 
-  /// 현재 사용자를 가구에서 제거합니다. (서버 미배포 시 404 가능)
+  /// 현재 참여 중인 그룹에서 나갑니다. `DELETE /households/me`
+  ///
+  /// - 성공: `{ isSuccess: true, result: null }`
+  /// - `HOUSEHOLD_4002` (400): 방장은 나갈 수 없음
+  /// - `HOUSEHOLD_4001` (404): 소속 그룹 없음
   Future<void> leaveHouseholdAsMember() async {
     try {
-      await _apiClient.post(
-        AppConfig.householdsLeaveEndpoint,
-        data: const <String, dynamic>{},
-      );
+      final response = await _apiClient.delete(AppConfig.householdsMeEndpoint);
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['isSuccess'] == true) {
+        return;
+      }
+      if (data is Map<String, dynamic>) {
+        throw ApiException(
+          message: data['message']?.toString() ?? '그룹 나가기에 실패했습니다.',
+          statusCode: response.statusCode,
+        );
+      }
     } catch (e) {
+      if (e is ApiException) rethrow;
       throw ApiException.fromDioError(e);
     }
   }

@@ -18,7 +18,8 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <!-- maximum-scale=1: 핀치 줌으로 터치 좌표가 어긋나는 것 방지 (OS 접근성 확대는 별도) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <!-- 모바일 브라우저 UI·안드로이드 상단 바 틴트 (사파리 컴팩트 모드 등) -->
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#26394B" media="(prefers-color-scheme: dark)">
@@ -43,37 +44,42 @@
     :root {
       color-scheme: dark;
     }
-    html {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      height: -webkit-fill-available;
-      background-color: #26394B;
-    }
+
+    /* 100vh 금지 — iOS Safari/PWA에서 레이아웃·터치 hitbox 불일치 원인 */
+    html,
     body {
       margin: 0;
       padding: 0;
       width: 100%;
-      height: 100%;
-      min-height: 100%;
       min-height: 100dvh;
-      min-height: -webkit-fill-available;
+      overflow-x: hidden;
       overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+      touch-action: manipulation;
       background-color: #26394B;
     }
+
+    /* iOS 구형 폴백 (dvh 미지원) */
+    @supports not (min-height: 100dvh) {
+      html,
+      body {
+        min-height: -webkit-fill-available;
+      }
+    }
+
+    /*
+     * safe-area padding은 Flutter MediaQuery가 처리하므로 body에 넣지 않음
+     * (중복 시 화면·터치 좌표가 함께 밀림)
+     */
+
     /* Flutter Web 캔버스 바깥(특히 iOS 노치·홈 인디케이터)에 기본 흰 배경이 보이지 않게 */
-    flt-scene-host, flutter-view,
-    flt-glass-pane, flt-semantics-placeholder {
+    flt-scene-host,
+    flutter-view,
+    flt-glass-pane,
+    flt-semantics-placeholder {
       background-color: transparent;
     }
-    /* iOS Safari: 뷰포트를 물리 화면 높이에 최대한 맞춤 (viewport-fit=cover와 함께) */
-    flutter-view, flt-glass-pane {
-      width: 100%;
-      min-height: 100%;
-      min-height: 100dvh;
-      min-height: -webkit-fill-available;
-    }
+
   </style>
 </head>
 <body>
@@ -85,6 +91,64 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>
+    // iOS Safari / PWA: visualViewport와 Flutter 캔버스 크기·위치 동기화
+    // (화면은 맞는데 터치만 위/아래로 어긋나는 현상 완화)
+    (function () {
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (!isIOS || !window.visualViewport) return;
+
+      var rafId = 0;
+
+      function findFlutterSurface() {
+        return document.querySelector('flutter-view') ||
+          document.querySelector('flt-glass-pane');
+      }
+
+      function resetPageScroll() {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      }
+
+      function syncVisualViewport() {
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(function () {
+          var vv = window.visualViewport;
+          var surface = findFlutterSurface();
+          if (!vv || !surface) return;
+
+          resetPageScroll();
+
+          surface.style.position = 'fixed';
+          surface.style.left = vv.offsetLeft + 'px';
+          surface.style.top = vv.offsetTop + 'px';
+          surface.style.width = vv.width + 'px';
+          surface.style.height = vv.height + 'px';
+          surface.style.margin = '0';
+          surface.style.padding = '0';
+          surface.style.maxWidth = 'none';
+          surface.style.maxHeight = 'none';
+          surface.style.minHeight = '0';
+          surface.style.boxSizing = 'border-box';
+        });
+      }
+
+      window.visualViewport.addEventListener('resize', syncVisualViewport);
+      window.visualViewport.addEventListener('scroll', syncVisualViewport);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(syncVisualViewport, 100);
+        setTimeout(syncVisualViewport, 300);
+      });
+      window.addEventListener('pageshow', syncVisualViewport);
+
+      var observer = new MutationObserver(syncVisualViewport);
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      syncVisualViewport();
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

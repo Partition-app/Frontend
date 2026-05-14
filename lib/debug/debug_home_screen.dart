@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:partition_app/core/router/app_router.dart';
+import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:provider/provider.dart';
@@ -166,15 +167,15 @@ class DebugHomeScreen extends StatelessWidget {
           trailing: requiresAuth && !isAuthenticated
               ? const Icon(Icons.lock, color: Colors.orange)
               : const Icon(Icons.arrow_forward_ios, size: 16),
-          onTap: () {
-            if (requiresAuth && !isAuthenticated) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('먼저 "더미 유저로 로그인"을 눌러주세요'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-              return;
+          onTap: () async {
+            if (requiresAuth) {
+              final isAuth = await AuthService().isAuthenticated();
+              if (!isAuth) {
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacementNamed(AppRouter.login);
+                }
+                return;
+              }
             }
             
             if (arguments != null) {

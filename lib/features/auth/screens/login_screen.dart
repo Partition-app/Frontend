@@ -6,6 +6,7 @@ import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/services/kakao_auth_service.dart';
+import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
 import 'package:partition_app/shared/utils/debug_helper.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -309,14 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // 로고 (기준 80px 대비 70%)
-                    const SizedBox(height: 100),
-                    Image.asset(
-                      'assets/icons/partition-logo-mini.png',
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.contain,
-                    ),
+                    const AuthFlowLogo(),
                     const SizedBox(height: 20),
                     Text.rich(
                       TextSpan(

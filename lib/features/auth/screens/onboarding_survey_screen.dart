@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
+import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_button.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 
@@ -14,18 +15,11 @@ class OnboardingSurveyScreen extends StatefulWidget {
 
 class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
   final TextEditingController _nameController = TextEditingController();
-  bool _isEditing = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
-  }
-
-  void _startEditing() {
-    setState(() {
-      _isEditing = true;
-    });
   }
 
   Future<void> _handleConfirm() async {
@@ -108,13 +102,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // 로고 이미지 (기준 80px 대비 70%)
-                    Image.asset(
-                      'assets/icons/partition-logo-mini.png',
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.contain,
-                    ),
+                    const AuthFlowLogo(),
                     const SizedBox(height: 20),
                     // 글래스모피즘 다이얼로그 박스
                     _buildDialogBox(),
@@ -193,23 +181,12 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
   }
 
   Widget _buildNameInput() {
-    if (!_isEditing) {
-      // 입력하기 버튼
-      return GlassmorphismButton(
-        text: '입력하기',
-        onTap: _startEditing,
-        width: 183,
-        height: 31,
-      );
-    }
-
-    // 텍스트 입력 필드 — onChanged로 부모 setState 하지 않음 (한글 조합 유지)
     return GlassmorphismInputField(
       controller: _nameController,
       hintText: '이름',
       autofocus: true,
-      width: 183,
-      height: 47,
+      width: AuthFlowTokens.fieldWidth,
+      height: AuthFlowTokens.fieldHeight,
     );
   }
 
@@ -217,13 +194,12 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
     return ListenableBuilder(
       listenable: _nameController,
       builder: (context, _) {
-        final isEnabled =
-            _isEditing && _nameController.text.trim().isNotEmpty;
+        final isEnabled = _nameController.text.trim().isNotEmpty;
         return GlassmorphismButton(
           text: '확인',
           onTap: _handleConfirm,
-          width: 183,
-          height: 31,
+          width: AuthFlowTokens.fieldWidth,
+          height: AuthFlowTokens.actionButtonHeight,
           enabled: isEnabled,
         );
       },

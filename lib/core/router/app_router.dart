@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:partition_app/features/auth/screens/login_screen.dart';
@@ -102,6 +104,7 @@ class _AuthGuard extends StatefulWidget {
 
 class _AuthGuardState extends State<_AuthGuard> {
   bool _isChecking = true;
+  bool _sessionValid = false;
 
   @override
   void initState() {
@@ -109,22 +112,34 @@ class _AuthGuardState extends State<_AuthGuard> {
     _checkAuth();
   }
 
+  void _redirectToLogin() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(AppRouter.login);
+  }
+
+  Future<void> _verifySessionOrRedirect() async {
+    final authService = AuthService();
+    final isAuth = await authService.isAuthenticated();
+    if (!isAuth && mounted) {
+      _redirectToLogin();
+    }
+  }
+
   Future<void> _checkAuth() async {
     final authService = AuthService();
     final isAuth = await authService.isAuthenticated();
 
-    if (!isAuth && mounted) {
-      // 인증되지 않은 경우 로그인 화면으로 리다이렉트
-      Navigator.of(context).pushReplacementNamed(AppRouter.login);
+    if (!isAuth) {
+      if (mounted) _redirectToLogin();
       return;
     }
 
-    // AuthProvider 업데이트
     if (mounted) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       await authProvider.checkAuthStatus();
-      
+
       setState(() {
+        _sessionValid = true;
         _isChecking = false;
       });
     }
@@ -140,6 +155,14 @@ class _AuthGuardState extends State<_AuthGuard> {
       );
     }
 
-    return widget.child;
+    if (!_sessionValid) {
+      return const SizedBox.shrink();
+    }
+
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => unawaited(_verifySessionOrRedirect()),
+      child: widget.child,
+    );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
+import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_button.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/models/preference_response_model.dart';
@@ -210,12 +211,7 @@ class _PreferenceSurveyScreenState extends State<PreferenceSurveyScreen> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // 로고 이미지
-                    Image.asset(
-                      'assets/icons/partition-logo-mini.png',
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.contain,
-                    ),
+                    const AuthFlowLogo(),
                     const SizedBox(height: 20),
                     // 글래스모피즘 다이얼로그 박스
                     _buildDialogBox(),

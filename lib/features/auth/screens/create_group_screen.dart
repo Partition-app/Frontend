@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
+import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_button.dart';
 
 class CreateGroupScreen extends StatefulWidget {
@@ -13,18 +14,11 @@ class CreateGroupScreen extends StatefulWidget {
 
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final TextEditingController _groupNameController = TextEditingController();
-  bool _isEditing = false;
 
   @override
   void dispose() {
     _groupNameController.dispose();
     super.dispose();
-  }
-
-  void _startEditing() {
-    setState(() {
-      _isEditing = true;
-    });
   }
 
   Future<void> _handleConfirm() async {
@@ -64,13 +58,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // 로고 이미지
-                    Image.asset(
-                      'assets/icons/partition-logo-mini.png',
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.contain,
-                    ),
+                    const AuthFlowLogo(),
                     const SizedBox(height: 20),
                     // 글래스모피즘 다이얼로그 박스
                     _buildDialogBox(),
@@ -149,23 +137,12 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   }
 
   Widget _buildGroupNameInput() {
-    if (!_isEditing) {
-      // 입력하기 버튼
-      return GlassmorphismButton(
-        text: '그룹명 입력하기',
-        onTap: _startEditing,
-        width: 183,
-        height: 31,
-      );
-    }
-
-    // 텍스트 입력 필드
     return GlassmorphismInputField(
       controller: _groupNameController,
       hintText: '그룹명',
       autofocus: true,
-      width: 183,
-      height: 31,
+      width: AuthFlowTokens.fieldWidth,
+      height: AuthFlowTokens.fieldHeight,
     );
   }
 
@@ -173,13 +150,12 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     return ListenableBuilder(
       listenable: _groupNameController,
       builder: (context, _) {
-        final isEnabled =
-            _isEditing && _groupNameController.text.trim().isNotEmpty;
+        final isEnabled = _groupNameController.text.trim().isNotEmpty;
         return GlassmorphismButton(
           text: '확인',
           onTap: _handleConfirm,
-          width: 183,
-          height: 31,
+          width: AuthFlowTokens.fieldWidth,
+          height: AuthFlowTokens.actionButtonHeight,
           enabled: isEnabled,
         );
       },

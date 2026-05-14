@@ -101,13 +101,11 @@ class _PhoneFrameWrapper extends StatelessWidget {
         // 이미 폰 크기이거나 세로가 더 짧은 경우
         if (screenW <= _kPhoneFrameBreakpoint) {
           if (kIsWeb) {
+            // iOS Safari/PWA: 고정 height SizedBox는 visualViewport와 어긋날 수 있어
+            // 부모(flutter-view)가 채우는 크기를 그대로 따르게 함
             return ColoredBox(
               color: _kWebBackdropColor,
-              child: SizedBox(
-                width: screenW,
-                height: screenH,
-                child: child,
-              ),
+              child: SizedBox.expand(child: child),
             );
           }
           return child;

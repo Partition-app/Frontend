@@ -16,13 +16,11 @@ class AppConfig {
   static const String registerEndpoint = '/auth/register';
   static const String kakaoLoginEndpoint = '/auth/kakao';
   static const String householdsEndpoint = '/households';
-  /// 현재 로그인한 사용자의 그룹 정보 조회
+  /// 현재 로그인 사용자 그룹 — GET 조회 · DELETE 그룹 나가기
   static const String householdsMeEndpoint = '/households/me';
   /// 그룹 이름 변경
   static const String householdsNameEndpoint = '/households/name';
   static const String householdsJoinEndpoint = '/households/join';
-  /// 현재 사용자 가구 탈퇴 (본문 규격은 백엔드 Swagger 기준으로 맞춤)
-  static const String householdsLeaveEndpoint = '/households/leave';
   /// 그룹(가구) 멤버 목록 (정산 시 참여자 선택용)
   static const String householdMembersEndpoint = '/households/members';
   /// 그룹 리더 위임 (방장만). 본문 예: `{ "targetUserId": number }`
@@ -134,8 +132,8 @@ class AppConfig {
   // ── 귀가 공유 (위치 기반 알림) ────────────────────────────────────────────
   /// 위치 공유 동의 저장/조회 (POST `{ agreed: bool }` · GET)
   static const String locationConsentEndpoint = '/households/location-consent';
-  /// 집 위치 저장/조회 (POST `{ lat, lng, radius }` · GET)
-  static const String homeLocationEndpoint = '/households/home-location';
+  /// 집 위치 저장(POST)·조회(GET). 조회 명세 경로 `/api/households/home-loc`
+  static const String homeLocationEndpoint = '/households/home-loc';
   /// 집 근처 진입 이벤트 전송 (POST `{ eventType: "entered_home_area" }`)
   static const String nearHomeEventEndpoint = '/households/location-events/near-home';
 
