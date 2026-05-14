@@ -12,7 +12,6 @@ import 'package:partition_app/features/auth/models/kakao_auth_response_model.dar
 import 'package:partition_app/features/auth/models/update_name_response_model.dart';
 import 'package:partition_app/features/auth/models/household_response_model.dart';
 import 'package:partition_app/features/auth/models/preference_response_model.dart';
-import 'package:partition_app/features/auth/services/user_service.dart';
 import 'package:partition_app/features/auth/services/kakao_auth_service.dart';
 
 /// 하우스 멤버 (`POST /supplies/settlement`의 `memberIds` 등)
@@ -63,7 +62,6 @@ String? _parseHouseholdMemberRole(Map<String, dynamic> e) {
 
 class AuthService {
   final ApiClient _apiClient = ApiClient();
-  final UserService _userService = UserService();
 
   Future<AuthResponseModel> login(String email, String password) async {
     try {
@@ -238,7 +236,7 @@ class AuthService {
     }
   }
 
-  /// 현재 참여 중인 그룹에서 나갑니다. `DELETE /households/me`
+  /// 현재 참여 중인 그룹에서 나갑니다. `DELETE /api/households/me`
   ///
   /// - 성공: `{ isSuccess: true, result: null }`
   /// - `HOUSEHOLD_4002` (400): 방장은 나갈 수 없음
@@ -252,7 +250,7 @@ class AuthService {
       }
       if (data is Map<String, dynamic>) {
         throw ApiException(
-          message: data['message']?.toString() ?? '그룹 나가기에 실패했습니다.',
+          message: _householdLeaveMessage(data),
           statusCode: response.statusCode,
         );
       }
@@ -262,8 +260,30 @@ class AuthService {
     }
   }
 
-  /// 회원 탈퇴 — `POST /api/users/me/withdraw` (본문 없음, soft delete).
-  Future<void> deleteMyAccountOnServer() => _userService.withdraw();
+  static String _householdLeaveMessage(Map<String, dynamic> data) {
+    final message = data['message']?.toString().trim();
+    if (message != null && message.isNotEmpty) return message;
+
+    switch (data['code']?.toString()) {
+      case 'HOUSEHOLD_4001':
+        return '소속된 그룹을 찾을 수 없습니다.';
+      case 'HOUSEHOLD_4002':
+        return '그룹 리더는 탈퇴할 수 없습니다. 리더를 위임한 후 탈퇴해주세요.';
+      default:
+        return '그룹 나가기에 실패했습니다.';
+    }
+  }
+
+  /// 회원 탈퇴 — `DELETE /api/households/me` 후 로컬 세션 정리는 [withdrawAccount]에서 처리.
+  Future<void> deleteMyAccountOnServer() async {
+    try {
+      await leaveHouseholdAsMember();
+    } on ApiException catch (e) {
+      // 그룹 미소속이면 서버 탈퇴는 생략하고 로컬 로그아웃만 진행합니다.
+      if (e.statusCode == 404) return;
+      rethrow;
+    }
+  }
 
   /// 그룹(가구) 참여
   Future<HouseholdResponseModel> joinHousehold({

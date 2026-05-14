@@ -234,7 +234,7 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
         await _confirm(ctx,
             title: '회원 탈퇴',
             message:
-                '계정이 탈퇴 처리되며, 그룹에 남아 있는 데이터는 삭제되지 않아요.\n계속 진행할까요?',
+                '그룹에서 탈퇴하고 로그아웃해요.\n계속 진행할까요?',
             confirmLabel: '탈퇴',
             destructive: true);
     if (!ok || !mounted) return;

@@ -6,12 +6,10 @@ import 'package:partition_app/core/push/fcm_registration_service.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/auth/models/user_model.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
-import 'package:partition_app/features/auth/services/user_service.dart';
 import 'package:partition_app/shared/utils/debug_helper.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
-  final UserService _userService = UserService();
   
   UserModel? _user;
   bool _isLoading = false;
@@ -148,9 +146,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 회원 탈퇴 API 호출. 성공 시 로컬 세션·FCM 정리. 실패 시 [ApiException] 전달.
+  /// 회원 탈퇴 — `DELETE /api/households/me` 후 로컬 세션·FCM 정리.
   Future<void> withdrawAccount() async {
-    await _userService.withdraw();
+    await _authService.deleteMyAccountOnServer();
     FcmRegistrationService.onLogout();
     await _authService.logout();
     _user = null;

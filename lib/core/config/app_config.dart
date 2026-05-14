@@ -16,7 +16,7 @@ class AppConfig {
   static const String registerEndpoint = '/auth/register';
   static const String kakaoLoginEndpoint = '/auth/kakao';
   static const String householdsEndpoint = '/households';
-  /// 현재 로그인 사용자 그룹 — GET 조회 · DELETE 그룹 나가기
+  /// 현재 로그인 사용자 그룹 — GET 조회 · DELETE 그룹 나가기·탈퇴
   static const String householdsMeEndpoint = '/households/me';
   /// 그룹 이름 변경
   static const String householdsNameEndpoint = '/households/name';
@@ -27,8 +27,6 @@ class AppConfig {
   static const String householdsLeaderEndpoint = '/households/leader';
   /// PATCH 등에 사용. GET 내 정보 조회는 앱에서 호출하지 않음(백엔드 미구현).
   static const String updateUserNameEndpoint = '/users/me';
-  /// 회원 탈퇴 (POST, 본문 없음)
-  static const String userWithdrawEndpoint = '/users/me/withdraw';
   /// FCM 디바이스 토큰 등록·갱신 (PATCH JSON `fcmToken`)
   static const String userFcmTokenEndpoint = '/users/me/fcm-token';
   static const String userPreferencesEndpoint = '/users/me/preferences';
