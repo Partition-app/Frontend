@@ -63,6 +63,8 @@ class HomeShareProvider extends ChangeNotifier {
     _homeAddress = StorageService.getHomeAddress();
     _lastNotifiedAt = StorageService.getLastNearHomeNotification();
 
+    await _syncFromServerIfPossible();
+
     // 주소가 없지만 좌표가 있으면 역지오코딩으로 주소 복원
     if (_homeAddress == null && _homeLocation != null) {
       final loc = _homeLocation!;
@@ -100,7 +102,10 @@ class HomeShareProvider extends ChangeNotifier {
 
       await _startLocationWatch();
       _isEnabled = true;
-      await StorageService.setSharingEnabled(true);
+      final saved = await StorageService.setSharingEnabled(true);
+      if (!saved) {
+        debugPrint('[HomeShare] 로컬 동의 저장 실패 — StorageService 미초기화 가능');
+      }
 
       try {
         await _service.saveLocationConsent(agreed: true);
@@ -238,6 +243,33 @@ class HomeShareProvider extends ChangeNotifier {
   }
 
   // ── 내부 메서드 ────────────────────────────────────────────────────────────
+
+  /// 서버 GET으로 동의·집 위치를 보강합니다. 실패해도 로컬 값은 유지합니다.
+  Future<void> _syncFromServerIfPossible() async {
+    try {
+      final serverAgreed = await _service.fetchLocationConsent();
+      if (serverAgreed == true) {
+        _isEnabled = true;
+        await StorageService.setSharingEnabled(true);
+      }
+    } on ApiException catch (e) {
+      debugPrint('[HomeShare] 동의 서버 조회 실패(로컬 유지): $e');
+    }
+
+    try {
+      final serverHome = await _service.fetchHomeLocation();
+      if (serverHome != null) {
+        _homeLocation = serverHome;
+        await StorageService.setHomeLocation(
+          serverHome.lat,
+          serverHome.lng,
+          serverHome.radius,
+        );
+      }
+    } on ApiException catch (e) {
+      debugPrint('[HomeShare] 집 위치 서버 조회 실패(로컬 유지): $e');
+    }
+  }
 
   void _restoreRoommateNearHomeFromStorage() {
     final at = StorageService.getRoommateNearHomeAt();

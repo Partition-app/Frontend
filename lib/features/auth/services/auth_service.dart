@@ -134,7 +134,7 @@ class AuthService {
     if (token == null || token.isEmpty) return false;
     // JWT 만료 여부 확인 — 만료됐으면 저장된 토큰을 제거하고 false 반환
     if (_isTokenExpired(token)) {
-      await StorageService.clear();
+      await StorageService.clearAuthSession();
       return false;
     }
     return true;

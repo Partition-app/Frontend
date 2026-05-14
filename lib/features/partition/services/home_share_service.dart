@@ -48,6 +48,28 @@ class HomeShareService {
     }
   }
 
+  /// GET `/households/location-consent` — 서버에 저장된 동의 여부.
+  /// 미가입·미구현 등 404는 `null` (로컬 설정 유지용).
+  Future<bool?> fetchLocationConsent() async {
+    try {
+      final response = await _apiClient.get(AppConfig.locationConsentEndpoint);
+      return _parseAgreed(response.data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  bool? _parseAgreed(dynamic data) {
+    if (data is! Map<String, dynamic>) return null;
+    if (data['isSuccess'] != true) return null;
+    final result = data['result'];
+    if (result is! Map<String, dynamic>) return null;
+    final agreed = result['agreed'];
+    if (agreed is bool) return agreed;
+    return null;
+  }
+
   /// 집 위치(위도·경도·반경 m)를 서버에 저장합니다.
   Future<void> saveHomeLocation({
     required double lat,
@@ -67,5 +89,28 @@ class HomeShareService {
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
+  }
+
+  /// GET `/households/home-location` — 서버에 저장된 집 좌표.
+  Future<({double lat, double lng, double radius})?> fetchHomeLocation() async {
+    try {
+      final response = await _apiClient.get(AppConfig.homeLocationEndpoint);
+      return _parseHomeLocation(response.data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  ({double lat, double lng, double radius})? _parseHomeLocation(dynamic data) {
+    if (data is! Map<String, dynamic>) return null;
+    if (data['isSuccess'] != true) return null;
+    final result = data['result'];
+    if (result is! Map<String, dynamic>) return null;
+    final lat = (result['lat'] as num?)?.toDouble();
+    final lng = (result['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+    final radius = (result['radius'] as num?)?.toDouble() ?? 300.0;
+    return (lat: lat, lng: lng, radius: radius);
   }
 }

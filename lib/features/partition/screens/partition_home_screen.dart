@@ -51,6 +51,15 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
   final GlobalKey<HomeCalendarWidgetState> _calendarKey =
       GlobalKey<HomeCalendarWidgetState>();
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(context.read<HomeShareProvider>().initialize());
+    });
+  }
+
   void _onDateSelected(DateTime date) {
     setState(() {
       _selectedDate = date;

@@ -318,19 +318,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      '파티션: 말하지 않아도 되는 공동생활 관리',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Pretendard Variable',
-                        height: 1.35,
+                    Text.rich(
+                      TextSpan(
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontFamily: 'Pretendard Variable',
+                          height: 1.35,
+                        ),
+                        children: const [
+                          TextSpan(
+                            text: '파티션',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          TextSpan(
+                            text: ': 말하지 않아도 되는 공동생활 관리',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 60),
-                    // 카카오 로그인 버튼 — 비트맵 확대 대신 벡터 스타일로 선명하게 표시
+                    // 카카오 로그인 버튼 — 공식 에셋(아이콘·타이포 포함)
                     Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 366),
@@ -341,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(6),
                             child: _isKakaoLoginLoading
                                 ? const SizedBox(
-                                    height: 45,
+                                    height: 55,
                                     child: Center(
                                       child: SizedBox(
                                         width: 20,
@@ -355,7 +365,39 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                   )
-                                : const _KakaoLoginButtonFace(),
+                                : Transform.translate(
+                                    offset: const Offset(0, -1),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Image.asset(
+                                        'assets/images/kakao_login_medium_wide.png',
+                                        width: double.infinity,
+                                        fit: BoxFit.fitWidth,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                          return Container(
+                                            width: double.infinity,
+                                            height: 45,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEE500),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            alignment: Alignment.center,
+                                            child: const Text(
+                                              '카카오 로그인',
+                                              style: TextStyle(
+                                                color: Color(0xFF000000),
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                                height: 1.0,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ),
                       ),
@@ -370,75 +412,4 @@ class _LoginScreenState extends State<LoginScreen> {
       ],
     );
   }
-}
-
-/// 저해상도 PNG(300×45) 확대 시 흐려지므로 공식 색·타이포로 렌더링합니다.
-class _KakaoLoginButtonFace extends StatelessWidget {
-  const _KakaoLoginButtonFace();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 45,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFEE500),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _KakaoTalkSymbol(size: 18),
-          SizedBox(width: 8),
-          Text(
-            '카카오 로그인',
-            style: TextStyle(
-              color: Color(0xFF000000),
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              height: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KakaoTalkSymbol extends StatelessWidget {
-  final double size;
-
-  const _KakaoTalkSymbol({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _KakaoTalkSymbolPainter(),
-      ),
-    );
-  }
-}
-
-class _KakaoTalkSymbolPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bubble = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height * 0.86),
-      Radius.circular(size.width * 0.42),
-    );
-    canvas.drawRRect(bubble, Paint()..color = const Color(0xFF000000));
-
-    final tail = Path()
-      ..moveTo(size.width * 0.22, size.height * 0.78)
-      ..lineTo(size.width * 0.10, size.height)
-      ..lineTo(size.width * 0.34, size.height * 0.78)
-      ..close();
-    canvas.drawPath(tail, Paint()..color = const Color(0xFF000000));
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

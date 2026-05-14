@@ -220,6 +220,14 @@ class StorageService {
     await setUserRole('GUEST');
   }
 
+  /// JWT 만료 등 재로그인만 필요할 때 — 귀가 공유·집 위치 등 로컬 설정은 유지합니다.
+  static Future<void> clearAuthSession() async {
+    try {
+      await removeToken();
+      await removeRefreshToken();
+    } catch (_) {}
+  }
+
   static Future<bool> clear() async {
     try {
       // Secure storage 삭제
