@@ -2,6 +2,13 @@ import 'package:partition_app/features/partition/models/shared_expense_table_ite
 import 'package:partition_app/features/partition/models/supply_purchase_model.dart';
 import 'package:partition_app/features/partition/utils/supply_purchase_input.dart';
 
+/// 표 금액 칸용 — 변동 금액 미입력 시 안내 문구 (`null` 이면 `미입력`)
+String utilityBillTableAmountLabel(int? baseAmount, int? monthAmount) {
+  final v = monthAmount ?? baseAmount;
+  if (v == null) return '미입력';
+  return formatAmountWithWon(v);
+}
+
 /// 해당 연·월에서 `payDay`에 맞는 달력상 납부일 (말일 초과 시 말일로 보정)
 DateTime utilityBillCalendarDueInMonth(int year, int month, int payDayRaw) {
   final p = payDayRaw.clamp(1, 31);
@@ -59,7 +66,7 @@ bool utilityBillSettledFromJson(Map<String, dynamic> json) {
   return false;
 }
 
-/// GET /api/bills/categories 항목
+/// GET `/api/bills/categories` 항목 (**공과금 종류** 조회 API)
 class UtilityBillCategory {
   final String category;
   final String categoryName;
@@ -70,9 +77,15 @@ class UtilityBillCategory {
   });
 
   factory UtilityBillCategory.fromJson(Map<String, dynamic> json) {
+    final code = json['utilityType'] as String? ??
+        json['category'] as String? ??
+        '';
+    final label = json['utilityTypeName'] as String? ??
+        json['categoryName'] as String? ??
+        '';
     return UtilityBillCategory(
-      category: json['category'] as String? ?? '',
-      categoryName: json['categoryName'] as String? ?? '',
+      category: code,
+      categoryName: label,
     );
   }
 
@@ -95,7 +108,9 @@ class UtilityBillCreateResult {
   final String utilityType;
   final String utilityTypeName;
   final int payDay;
-  final int amount;
+  final bool isFixed;
+  final int? amount;
+  final int? thisMonthAmount;
   final String? note;
   final String? status;
   final String? createdAt;
@@ -105,11 +120,15 @@ class UtilityBillCreateResult {
     required this.utilityType,
     required this.utilityTypeName,
     required this.payDay,
-    required this.amount,
+    required this.isFixed,
+    this.amount,
+    this.thisMonthAmount,
     this.note,
     this.status,
     this.createdAt,
   });
+
+  int? get effectiveDisplayWon => thisMonthAmount ?? amount;
 
   factory UtilityBillCreateResult.fromJson(Map<String, dynamic> json) {
     var payDay = (json['payDay'] as num?)?.toInt() ?? 0;
@@ -129,12 +148,18 @@ class UtilityBillCreateResult {
     final typeName = json['utilityTypeName'] as String? ??
         json['billTypeName'] as String? ??
         '';
+    final rfFixed = json['isFixed'];
+    final isFixedParsed = rfFixed is bool
+        ? rfFixed
+        : (rfFixed == 1 ? true : (rfFixed == 0 ? false : true));
     return UtilityBillCreateResult(
       billId: (json['billId'] as num?)?.toInt() ?? 0,
       utilityType: type,
       utilityTypeName: typeName,
       payDay: payDay.clamp(1, 31),
-      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      isFixed: isFixedParsed,
+      amount: (json['amount'] as num?)?.toInt(),
+      thisMonthAmount: (json['thisMonthAmount'] as num?)?.toInt(),
       note: json['note'] as String?,
       status: json['status'] is String ? json['status'] as String : null,
       createdAt: json['createdAt'] as String?,
@@ -149,7 +174,11 @@ class UtilityBillListItem {
   final String utilityTypeName;
   /// API `payDay` (매달 이 날 결제)
   final int payDay;
-  final int amount;
+  final bool isFixed;
+  /// 고정 금액(원). 변동이면 null 허용.
+  final int? amount;
+  /// 이번 달 실제 금액 (원). 미입력이면 null.
+  final int? thisMonthAmount;
   final String? note;
   final String? status;
   /// 구 응답 (`date`/`dueDate`) 대비
@@ -160,7 +189,9 @@ class UtilityBillListItem {
     required this.utilityType,
     required this.utilityTypeName,
     required this.payDay,
-    required this.amount,
+    required this.isFixed,
+    this.amount,
+    this.thisMonthAmount,
     this.note,
     this.status,
     this.legacyDueIso,
@@ -175,6 +206,13 @@ class UtilityBillListItem {
     var payDay = (json['payDay'] as num?)?.toInt() ?? 0;
     final legacyRaw =
         json['date'] as String? ?? json['dueDate'] as String? ?? '';
+    bool isFixedParsed;
+    final rawFx = json['isFixed'];
+    if (rawFx is bool) {
+      isFixedParsed = rawFx;
+    } else {
+      isFixedParsed = true;
+    }
     if (payDay < 1 || payDay > 31) {
       final dt = DateTime.tryParse(legacyRaw);
       if (dt != null) {
@@ -190,7 +228,9 @@ class UtilityBillListItem {
       utilityType: type,
       utilityTypeName: typeName,
       payDay: payDay,
-      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      isFixed: isFixedParsed,
+      amount: (json['amount'] as num?)?.toInt(),
+      thisMonthAmount: (json['thisMonthAmount'] as num?)?.toInt(),
       note: json['note'] as String?,
       status: json['status'] is String ? json['status'] as String : null,
       legacyDueIso: legacyRaw.isNotEmpty ? legacyRaw : null,
@@ -209,10 +249,11 @@ class UtilityBillListItem {
     return SharedExpenseTableItem(
       name: utilityTypeName.isNotEmpty ? utilityTypeName : utilityType,
       date: dateLabel,
-      amount: formatAmountWithWon(amount),
+      amount: utilityBillTableAmountLabel(amount, thisMonthAmount),
       quantity: qty,
       manuallySettled: settled,
       billId: billId,
+      utilityIsFixed: isFixed,
       utilityTypeEnum: utilityType,
       utilityDueDateIso: legacyDueIso,
       utilityPayDay: payDay,
@@ -259,6 +300,7 @@ class UtilityBillSettlementSummary {
 }
 
 class UtilityBillSettlementLine {
+  final int paymentId;
   final int billId;
   final String utilityTypeName;
   final String dueDate;
@@ -266,6 +308,7 @@ class UtilityBillSettlementLine {
   final String? note;
 
   const UtilityBillSettlementLine({
+    required this.paymentId,
     required this.billId,
     required this.utilityTypeName,
     required this.dueDate,
@@ -276,6 +319,7 @@ class UtilityBillSettlementLine {
   factory UtilityBillSettlementLine.fromJson(Map<String, dynamic> json) {
     final due = json['dueDate'] as String? ?? '';
     return UtilityBillSettlementLine(
+      paymentId: (json['paymentId'] as num?)?.toInt() ?? 0,
       billId: (json['billId'] as num?)?.toInt() ?? 0,
       utilityTypeName:
           json['utilityTypeName'] as String? ?? json['name'] as String? ?? '',
@@ -303,19 +347,139 @@ class UtilityBillSettlementLine {
       amount: formatAmountWithWon(amount),
       quantity: qty,
       billId: billId,
+      paymentId: paymentId,
       utilityDueDateIso: iso,
       utilityPayDay: dt?.day,
     );
   }
 }
 
+/// `GET /api/bills/payments` — 납부 기록 한 줄
+class UtilityBillPaymentRecord {
+  final int paymentId;
+  final int billId;
+  final String utilityType;
+  final String utilityTypeName;
+  final bool isFixed;
+  final int payDay;
+  final String dueDate;
+  final int? amount;
+  final String status;
+
+  const UtilityBillPaymentRecord({
+    required this.paymentId,
+    required this.billId,
+    required this.utilityType,
+    required this.utilityTypeName,
+    required this.isFixed,
+    required this.payDay,
+    required this.dueDate,
+    this.amount,
+    required this.status,
+  });
+
+  factory UtilityBillPaymentRecord.fromJson(Map<String, dynamic> json) {
+    final st = json['status']?.toString() ?? 'UNSETTLED';
+    return UtilityBillPaymentRecord(
+      paymentId: (json['paymentId'] as num?)?.toInt() ?? 0,
+      billId: (json['billId'] as num?)?.toInt() ?? 0,
+      utilityType:
+          json['utilityType'] as String? ?? json['billType'] as String? ?? '',
+      utilityTypeName: json['utilityTypeName'] as String? ??
+          json['billTypeName'] as String? ??
+          '',
+      isFixed: json['isFixed'] is bool ? json['isFixed'] as bool : true,
+      payDay: (json['payDay'] as num?)?.toInt() ?? 1,
+      dueDate: json['dueDate'] as String? ?? '',
+      amount: (json['amount'] as num?)?.toInt(),
+      status: st.toUpperCase().trim(),
+    );
+  }
+
+  SharedExpenseTableItem toSharedExpenseTableItem() {
+    var iso = dueDate.trim();
+    if (iso.contains('T')) {
+      iso = iso.split('T').first;
+    }
+    if (iso.length > 10) {
+      iso = iso.substring(0, 10);
+    }
+    final dt = DateTime.tryParse(iso);
+    final settled = utilityBillSettledFromJson({'status': status});
+    final displayDate = iso.isNotEmpty ? displayDateFromIso(iso) : '—';
+    return SharedExpenseTableItem(
+      name: utilityTypeName.isNotEmpty ? utilityTypeName : utilityType,
+      date: displayDate,
+      amount: utilityBillTableAmountLabel(amount, null),
+      manuallySettled: settled,
+      billId: billId,
+      paymentId: paymentId,
+      utilityIsFixed: isFixed,
+      utilityTypeEnum:
+          utilityType.isNotEmpty ? utilityType : null,
+      utilityDueDateIso: iso.isNotEmpty ? iso : null,
+      utilityPayDay: dt?.day ?? payDay,
+    );
+  }
+}
+
+/// GET `/api/bills/payments` 성공 시 `result`
+class UtilityBillPaymentsResult {
+  final int totalCount;
+  final List<UtilityBillPaymentRecord> payments;
+
+  const UtilityBillPaymentsResult({
+    required this.totalCount,
+    required this.payments,
+  });
+
+  factory UtilityBillPaymentsResult.fromJson(Map<String, dynamic> json) {
+    final raw = json['payments'];
+    final list = raw is List
+        ? raw
+            .map((e) => UtilityBillPaymentRecord.fromJson(
+                  e as Map<String, dynamic>,
+                ))
+            .toList()
+        : <UtilityBillPaymentRecord>[];
+    return UtilityBillPaymentsResult(
+      totalCount: (json['totalCount'] as num?)?.toInt() ?? list.length,
+      payments: list,
+    );
+  }
+}
+
+/// PATCH `/api/bills/{billId}/payments/{yearMonth}/amount`
+class UtilityBillVariableAmountPatchResult {
+  final int billId;
+  final String yearMonth;
+  final int thisMonthAmount;
+
+  const UtilityBillVariableAmountPatchResult({
+    required this.billId,
+    required this.yearMonth,
+    required this.thisMonthAmount,
+  });
+
+  factory UtilityBillVariableAmountPatchResult.fromJson(
+      Map<String, dynamic> json) {
+    return UtilityBillVariableAmountPatchResult(
+      billId: (json['billId'] as num?)?.toInt() ?? 0,
+      yearMonth: json['yearMonth'] as String? ?? '',
+      thisMonthAmount: (json['thisMonthAmount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 /// POST `/api/bills/settlement` 성공 시 `result.items[]`
 class BillSettlementShareItem {
+  final int paymentId;
   final int billId;
   final String utilityTypeName;
   final int amount;
 
   const BillSettlementShareItem({
+    required this.paymentId,
     required this.billId,
     required this.utilityTypeName,
     required this.amount,
@@ -327,6 +491,7 @@ class BillSettlementShareItem {
         json['name'] as String? ??
         '';
     return BillSettlementShareItem(
+      paymentId: (json['paymentId'] as num?)?.toInt() ?? 0,
       billId: (json['billId'] as num?)?.toInt() ?? 0,
       utilityTypeName: name,
       amount: (json['amount'] as num?)?.toInt() ?? 0,

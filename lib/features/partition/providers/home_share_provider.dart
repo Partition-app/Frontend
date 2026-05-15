@@ -32,6 +32,7 @@ class HomeShareProvider extends ChangeNotifier {
   StreamSubscription<Position>? _positionSub;
   Timer? _roommateNearHomeExpiryTimer;
   Timer? _roommateNearHomePollTimer;
+  Future<void>? _ongoingInitialize;
 
   final HomeShareService _service = HomeShareService();
 
@@ -66,12 +67,24 @@ class HomeShareProvider extends ChangeNotifier {
   ({double lat, double lng, double radius})? get homeLocation => _homeLocation;
   String? get homeAddress => _homeAddress;
 
-  /// 저장된 상태를 로드하고 필요 시 위치 감시를 재개합니다.
+  /// 저장된 상태를 로드하고 서버와 동기화한 뒤 위치 감시를 재개합니다.
   Future<void> initialize() async {
+    if (_ongoingInitialize != null) return _ongoingInitialize!;
+    _ongoingInitialize = _initializeBody();
+    try {
+      await _ongoingInitialize;
+    } finally {
+      _ongoingInitialize = null;
+    }
+  }
+
+  Future<void> _initializeBody() async {
     _isEnabled = StorageService.getSharingEnabled();
     _homeLocation = StorageService.getHomeLocation();
     _homeAddress = StorageService.getHomeAddress();
     _lastNotifiedAt = StorageService.getLastNearHomeNotification();
+
+    await _syncFromServerIfPossible();
 
     // 주소가 없지만 좌표가 있으면 역지오코딩으로 주소 복원
     if (_homeAddress == null && _homeLocation != null) {
@@ -83,14 +96,88 @@ class HomeShareProvider extends ChangeNotifier {
       }
     }
 
-    if (_isEnabled && _homeLocation != null) {
-      await _startLocationWatch();
+    if (_isEnabled) {
+      if (_homeLocation == null) {
+        await _ensureHomeLocationFromServer();
+      }
+      if (_homeLocation != null) {
+        await _startLocationWatch();
+        await _evaluateCurrentPosition();
+      } else {
+        debugPrint('[HomeShare] 귀가 공유 ON이지만 집 좌표 없음 — 위치 감시 대기');
+      }
     }
+
     _restoreRoommateNearHomeFromStorage();
     await refreshRoommateNearHomeFromServer();
     _startRoommateNearHomePolling();
     notifyListeners();
   }
+
+  /// 서버 GET으로 동의·집 위치를 보강합니다. 로컬 ON 상태는 서버 미동기화 시 유지합니다.
+  Future<void> _syncFromServerIfPossible() async {
+    final localEnabled = _isEnabled;
+
+    try {
+      final serverAgreed = await _service.fetchLocationConsent();
+      if (serverAgreed == true) {
+        _isEnabled = true;
+        await StorageService.setSharingEnabled(true);
+      } else if (serverAgreed == false && !localEnabled) {
+        _isEnabled = false;
+        await StorageService.setSharingEnabled(false);
+        _stopLocationWatch();
+      } else if (localEnabled) {
+        // 로컬 ON인데 서버가 false/null — 재등록 시도, UI는 ON 유지
+        _isEnabled = true;
+        try {
+          await _service.saveLocationConsent(agreed: true);
+        } on ApiException catch (e) {
+          debugPrint('[HomeShare] 동의 서버 재등록 실패: $e');
+        }
+      }
+    } on ApiException catch (e) {
+      debugPrint('[HomeShare] 동의 서버 조회 실패(로컬 유지): $e');
+    }
+
+    try {
+      final homeSnap = await _service.fetchHomeLocationSnapshot();
+      if (homeSnap.coordinates != null) {
+        final c = homeSnap.coordinates!;
+        _homeLocation = c;
+        await StorageService.setHomeLocation(c.lat, c.lng, c.radius);
+      }
+    } on ApiException catch (e) {
+      debugPrint('[HomeShare] 집 위치 서버 조회 실패(로컬 유지): $e');
+    }
+  }
+
+  /// 가구 공용 집 좌표를 서버에서 가져옵니다 (2번째 사용자 등 로컬 미설정 시).
+  Future<bool> _ensureHomeLocationFromServer() async {
+    if (_homeLocation != null) return true;
+    try {
+      final snap = await _service.fetchHomeLocationSnapshot();
+      final c = snap.coordinates;
+      if (c == null) return false;
+      _homeLocation = c;
+      await StorageService.setHomeLocation(c.lat, c.lng, c.radius);
+      if (_homeAddress == null) {
+        final address = await GeocodingService.reverseGeocode(c.lat, c.lng);
+        if (address != null) {
+          _homeAddress = address;
+          await StorageService.setHomeAddress(address);
+        }
+      }
+      return true;
+    } on ApiException catch (e) {
+      debugPrint('[HomeShare] 집 좌표 서버 보강 실패: $e');
+      return false;
+    }
+  }
+
+  /// 가구에 등록된 집 좌표를 서버에서 받아옵니다. 성공 시 true.
+  Future<bool> ensureHomeLocationFromServer() =>
+      _ensureHomeLocationFromServer();
 
   /// GET `/households/location-events/near-home`으로 룸메이트 귀가 배너를 갱신합니다.
   Future<void> refreshRoommateNearHomeFromServer() async {
@@ -165,9 +252,18 @@ class HomeShareProvider extends ChangeNotifier {
       final bool granted = await _ensureLocationPermission();
       if (!granted) return false;
 
+      if (_homeLocation == null) {
+        await _ensureHomeLocationFromServer();
+      }
+      if (_homeLocation == null) {
+        debugPrint('[HomeShare] 집 위치 없어 귀가 공유 활성화 불가');
+        return false;
+      }
+
       await _startLocationWatch();
       _isEnabled = true;
       await StorageService.setSharingEnabled(true);
+      await _evaluateCurrentPosition();
 
       try {
         await _service.saveLocationConsent(agreed: true);
@@ -362,6 +458,24 @@ class HomeShareProvider extends ChangeNotifier {
         debugPrint('[HomeShare] 위치 스트림 오류: $e');
       },
     );
+  }
+
+  /// 토글 ON·홈 재진입 시 이미 집 근처여도 알림이 가도록 현재 좌표를 한 번 평가합니다.
+  Future<void> _evaluateCurrentPosition() async {
+    if (!_isEnabled || _homeLocation == null) return;
+    try {
+      final granted = await _ensureLocationPermission();
+      if (!granted) return;
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      _onPosition(position);
+    } catch (e) {
+      debugPrint('[HomeShare] 현재 위치 평가 실패: $e');
+    }
   }
 
   void _stopLocationWatch() {

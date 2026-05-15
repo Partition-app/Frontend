@@ -47,6 +47,7 @@ class _SharedExpenseItemDetailSheetState
   void didUpdateWidget(SharedExpenseItemDetailSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.purchaseId != widget.item.purchaseId ||
+        oldWidget.item.paymentId != widget.item.paymentId ||
         oldWidget.item.billId != widget.item.billId ||
         oldWidget.item.manuallySettled != widget.item.manuallySettled ||
         oldWidget.item.name != widget.item.name) {

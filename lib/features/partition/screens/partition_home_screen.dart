@@ -51,6 +51,15 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
   final GlobalKey<HomeCalendarWidgetState> _calendarKey =
       GlobalKey<HomeCalendarWidgetState>();
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(context.read<HomeShareProvider>().initialize());
+    });
+  }
+
   void _onDateSelected(DateTime date) {
     setState(() {
       _selectedDate = date;
@@ -132,7 +141,10 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
       return;
     }
 
-    // 집 위치가 없으면 설정 다이얼로그 먼저
+    // 집 위치가 없으면 서버(가구 공용) 좌표 먼저 시도 후 설정 다이얼로그
+    if (provider.homeLocation == null) {
+      await provider.ensureHomeLocationFromServer();
+    }
     if (provider.homeLocation == null) {
       final bool set = await _showHomeSetupDialog(context);
       if (!set) return;

@@ -28,6 +28,9 @@ class SharedExpenseManualModal extends StatefulWidget {
   /// 물품·공과금 탭: `+`로 진입 시 추가 폼만 열고, 신규 저장 후 목록 없이 닫는다.
   final bool addOnlyEntry;
 
+  final String? utilityPaymentsRangeStartIso;
+  final String? utilityPaymentsRangeEndIso;
+
   const SharedExpenseManualModal({
     super.key,
     required this.isUtility,
@@ -37,6 +40,8 @@ class SharedExpenseManualModal extends StatefulWidget {
     required this.onApply,
     this.initialOpenEditIndex,
     this.addOnlyEntry = false,
+    this.utilityPaymentsRangeStartIso,
+    this.utilityPaymentsRangeEndIso,
   });
 
   @override
@@ -63,6 +68,10 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
   bool _submittingUtilityBill = false;
   bool _deletingPurchase = false;
   bool _deletingUtilityBill = false;
+  bool _loadingUtilityPayments = false;
+
+  /// 공과금: 고정 여부 (API `isFixed`).
+  bool _utilityIsFixed = true;
 
   /// 물품 구체 표기 (예: 콘프라이트 500g)
   late final TextEditingController _detailCtrl;
@@ -111,6 +120,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
       _editIndex = null;
       _selectedUtilityEnum = null;
       _utilityPayDay = 1;
+      _utilityIsFixed = true;
       _selectedMajorCode = null;
       _selectedMinorCode = null;
     }
@@ -125,8 +135,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
       _isForm = true;
       _editIndex = ixEditUtility;
       final e = _items[ixEditUtility];
-      _amountCtrl.text = e.amount;
+      _utilityIsFixed = e.utilityIsFixed ?? true;
       _qtyCtrl.text = e.quantity ?? '';
+      _fillUtilityAmountFromItem(e);
       _dateCtrl.clear();
       _detailCtrl.clear();
       _selectedMajorCode = null;
@@ -338,6 +349,11 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
     return null;
   }
 
+  void _fillUtilityAmountFromItem(SharedExpenseTableItem e) {
+    final parsed = tryParseWonAmount(e.amount);
+    _amountCtrl.text = parsed != null ? '${parsed}' : '';
+  }
+
   void _toggleUtilityEnum(String code) {
     setState(() {
       if (_selectedUtilityEnum == code) {
@@ -367,6 +383,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
       _amountCtrl.clear();
       _qtyCtrl.clear();
       _utilityPayDay = 1;
+      _utilityIsFixed = true;
       _selectedMajorCode = null;
       _selectedMinorCode = null;
     });
@@ -377,9 +394,10 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
     setState(() {
       _isForm = true;
       _editIndex = index;
-      _amountCtrl.text = e.amount;
       _qtyCtrl.text = e.quantity ?? '';
       if (widget.isUtility) {
+        _utilityIsFixed = e.utilityIsFixed ?? true;
+        _fillUtilityAmountFromItem(e);
         _dateCtrl.clear();
         _detailCtrl.clear();
         _selectedMajorCode = null;
@@ -387,6 +405,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
         _selectedUtilityEnum = _inferUtilityEnumFromItem(e);
         _utilityPayDay = _inferUtilityPayDayFromItem(e) ?? 1;
       } else {
+        _amountCtrl.text = e.amount;
         _dateCtrl.text = e.date;
         if (e.categoryCode != null &&
             e.categoryCode!.isNotEmpty &&
@@ -464,6 +483,43 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
     }
   }
 
+  Future<void> _importBillPaymentsIntoList() async {
+    final start = widget.utilityPaymentsRangeStartIso;
+    final end = widget.utilityPaymentsRangeEndIso;
+    if (start == null || end == null || !widget.submitUtilityViaApi) return;
+    if (_loadingUtilityPayments ||
+        _submittingPurchase ||
+        _submittingUtilityBill) return;
+    setState(() => _loadingUtilityPayments = true);
+    try {
+      final res = await _utilityBillService.fetchBillPayments(
+        startDate: start,
+        endDate: end,
+      );
+      if (!mounted) return;
+      final rows =
+          res.payments.map((p) => p.toSharedExpenseTableItem()).toList();
+      rows.sort((a, b) {
+        final da = a.utilityDueDateIso ?? '';
+        final db = b.utilityDueDateIso ?? '';
+        return da.compareTo(db);
+      });
+      setState(() {
+        _items = rows;
+        _loadingUtilityPayments = false;
+      });
+      _snack('납부 기록 ${res.payments.length}건을 불러왔어요.');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingUtilityPayments = false);
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingUtilityPayments = false);
+      _snack('납부 기록을 불러오지 못했습니다.');
+    }
+  }
+
   void _snack(String msg) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -505,27 +561,27 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
 
     if (widget.isUtility) {
       final code = _selectedUtilityEnum?.trim();
-      if (code == null ||
-          code.isEmpty ||
-          _utilityLabelForCode(code) == null ||
-          amount.isEmpty) {
-        _snack('공과금 종류·매달 결제일·납부액은 필수예요.');
+      if (code == null || code.isEmpty || _utilityLabelForCode(code) == null) {
+        _snack('공과금 종류와 매달 결제일은 필수예요.');
         return;
       }
       final payDay = _utilityPayDay.clamp(1, 31);
-      final amountInt = tryParseWonAmount(amount);
-      if (amountInt == null) {
-        _snack('금액을 숫자로 입력해 주세요.');
-        return;
-      }
-      if (amountInt < 1) {
-        _snack('금액은 1원 이상이어야 해요.');
-        return;
+      int? amountInt;
+      if (amount.isNotEmpty) {
+        amountInt = tryParseWonAmount(amount);
+        if (amountInt == null) {
+          _snack('금액 형식을 확인해 주세요.');
+          return;
+        }
+        if (amountInt < 1) {
+          _snack('금액은 1원 이상으로 입력할 수 있어요.');
+          return;
+        }
       }
       final noteTrim = qty.trim();
       final label = _utilityLabelForCode(code)!;
-      final amountDisp = formatAmountWithWon(amountInt);
       final dateLabel = utilityBillRelativeDueLabel(DateTime.now(), payDay);
+      final localAmountLabel = utilityBillTableAmountLabel(amountInt, null);
 
       if (widget.submitUtilityViaApi && _editIndex != null) {
         final prev = _items[_editIndex!];
@@ -538,6 +594,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
               billId: bid,
               utilityType: code,
               payDay: payDay,
+              isFixed: _utilityIsFixed,
               amount: amountInt,
               note: noteTrim.isEmpty ? null : noteTrim,
             );
@@ -551,14 +608,17 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
             final row = SharedExpenseTableItem(
               name: nameLabel,
               date: utilityBillRelativeDueLabel(DateTime.now(), updated.payDay),
-              amount: formatAmountWithWon(updated.amount),
+              amount: utilityBillTableAmountLabel(
+                  updated.amount, updated.thisMonthAmount),
               quantity: qFromServer ?? (noteTrim.isEmpty ? null : noteTrim),
               manuallySettled: prev.manuallySettled,
+              utilityIsFixed: updated.isFixed,
               utilityTypeEnum: updated.utilityType.isNotEmpty
                   ? updated.utilityType
                   : code,
               utilityPayDay: updated.payDay,
               billId: updated.billId,
+              paymentId: prev.paymentId,
               utilityDueDateIso: prev.utilityDueDateIso,
             );
             _commitRow(row);
@@ -582,6 +642,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
           final created = await _utilityBillService.createBill(
             utilityType: code,
             payDay: payDay,
+            isFixed: _utilityIsFixed,
             amount: amountInt,
             note: noteTrim.isEmpty ? null : noteTrim,
           );
@@ -594,8 +655,12 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
           final row = SharedExpenseTableItem(
             name: nameLabel,
             date: utilityBillRelativeDueLabel(DateTime.now(), created.payDay),
-            amount: formatAmountWithWon(created.amount),
+            amount: utilityBillTableAmountLabel(
+              created.amount,
+              created.thisMonthAmount,
+            ),
             quantity: qFromServer ?? (noteTrim.isEmpty ? null : noteTrim),
+            utilityIsFixed: created.isFixed,
             utilityTypeEnum: created.utilityType.isNotEmpty
                 ? created.utilityType
                 : code,
@@ -621,10 +686,12 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
         row = SharedExpenseTableItem(
           name: label,
           date: dateLabel,
-          amount: amountDisp,
+          amount: localAmountLabel,
           quantity: noteTrim.isEmpty ? null : noteTrim,
           manuallySettled: prev.manuallySettled,
           billId: prev.billId,
+          paymentId: prev.paymentId,
+          utilityIsFixed: _utilityIsFixed,
           utilityTypeEnum: code,
           utilityPayDay: payDay,
           utilityDueDateIso: prev.utilityDueDateIso,
@@ -633,8 +700,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
         row = SharedExpenseTableItem(
           name: label,
           date: dateLabel,
-          amount: amountDisp,
+          amount: localAmountLabel,
           quantity: noteTrim.isEmpty ? null : noteTrim,
+          utilityIsFixed: _utilityIsFixed,
           utilityTypeEnum: code,
           utilityPayDay: payDay,
         );
@@ -960,6 +1028,43 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
           style: _subtitleStyle,
         ),
         const SizedBox(height: 16),
+        if (widget.isUtility &&
+            widget.submitUtilityViaApi &&
+            widget.utilityPaymentsRangeStartIso != null &&
+            widget.utilityPaymentsRangeEndIso != null) ...[
+          OutlinedButton.icon(
+            onPressed: (_loadingUtilityPayments ||
+                    _deletingPurchase ||
+                    _deletingUtilityBill)
+                ? null
+                : _importBillPaymentsIntoList,
+            icon: _loadingUtilityPayments
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download_rounded,
+                    color: Colors.white70, size: 18),
+            label: Text(
+              _loadingUtilityPayments ? '불러오는 중…' : '납부 기록 불러오기',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Pretendard Variable',
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withOpacity(0.45)),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         Expanded(
           child: _items.isEmpty
               ? Center(
@@ -1018,7 +1123,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                           ),
                           OutlinedButton(
                             onPressed:
-                                (_deletingPurchase || _deletingUtilityBill)
+                                (_deletingPurchase ||
+                                        _deletingUtilityBill ||
+                                        _loadingUtilityPayments)
                                     ? null
                                     : () => _openEditForm(i),
                             style: _listOutlineButtonStyle(
@@ -1035,7 +1142,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                           const SizedBox(width: 6),
                           OutlinedButton(
                             onPressed:
-                                (_deletingPurchase || _deletingUtilityBill)
+                                (_deletingPurchase ||
+                                        _deletingUtilityBill ||
+                                        _loadingUtilityPayments)
                                     ? null
                                     : () => _deleteAt(i),
                             style: _listOutlineButtonStyle(
@@ -1239,6 +1348,64 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                       const SizedBox(height: 6),
                       _glassFormField(child: _buildUtilityPayDayDropdown()),
                       const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '금액 유형',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.88),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Pretendard Variable',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 6,
+                        children: [
+                          ChoiceChip(
+                            label: Text(
+                              '고정 금액',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(
+                                    _utilityIsFixed ? 1 : 0.55),
+                                fontFamily: 'Pretendard Variable',
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            selected: _utilityIsFixed,
+                            selectedColor:
+                                Colors.white.withOpacity(0.22),
+                            backgroundColor:
+                                Colors.white.withOpacity(0.06),
+                            onSelected: (_) {
+                              setState(() => _utilityIsFixed = true);
+                            },
+                          ),
+                          ChoiceChip(
+                            label: Text(
+                              '변동 금액',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(
+                                    !_utilityIsFixed ? 1 : 0.55),
+                                fontFamily: 'Pretendard Variable',
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            selected: !_utilityIsFixed,
+                            selectedColor:
+                                Colors.white.withOpacity(0.22),
+                            backgroundColor:
+                                Colors.white.withOpacity(0.06),
+                            onSelected: (_) {
+                              setState(() => _utilityIsFixed = false);
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                     ] else ...[
                       _buildDatePickerField(hint: '구매일 선택'),
                       const SizedBox(height: 10),
@@ -1251,7 +1418,9 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                         keyboardType: TextInputType.text,
                         decoration: _fieldDecoration(
                           widget.isUtility
-                              ? '납부액 (예: 5980 또는 5,980원)'
+                              ? (_utilityIsFixed
+                                  ? '납부액 (선택, 미입력 가능)'
+                                  : '이번 달 납부액 (선택, 미입력 시 표에 「미입력」)')
                               : '금액 (예: 5980 또는 5,980원)',
                         ),
                       ),
@@ -1277,12 +1446,15 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
         ),
         const SizedBox(height: 14),
         _settingsModalActionButton(
-          label: (_submittingPurchase || _submittingUtilityBill)
+          label: (_submittingPurchase ||
+                  _submittingUtilityBill ||
+                  _loadingUtilityPayments)
               ? '등록 중…'
               : '저장',
           onTap: (_categoriesLoading ||
                   _submittingPurchase ||
-                  _submittingUtilityBill)
+                  _submittingUtilityBill ||
+                  _loadingUtilityPayments)
               ? null
               : _saveForm,
         ),

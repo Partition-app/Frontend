@@ -65,13 +65,15 @@ class AppConfig {
   static String suppliesSettlementDetailPath(int settlementId) =>
       '/supplies/settlement/$settlementId';
 
-  /// 공과금 카테고리 조회 (GET)
+  /// 공과금 **종류** 조회 (`GET`)
   static const String billsCategoriesEndpoint = '/bills/categories';
   /// 공과금 목록(GET `startDate`·`endDate`) · 수동 추가(POST)
   static const String billsEndpoint = '/bills';
+  /// 공과금 **납부 기록** 조회 (GET `startDate`, `endDate`)
+  static const String billsPaymentsEndpoint = '/bills/payments';
   /// 공과금 정산 대상 목록 (GET `startDate`·`endDate`)
   static const String billsSettlementListEndpoint = '/bills/settlement/list';
-  /// 공과금 정산 요청 (POST `{ billIds, memberIds }`) — 성공 시 서버가 알림·FCM 발송
+  /// 공과금 정산 요청 (POST `{ paymentIds, memberIds }`)
   static const String billsSettlementRequestEndpoint = '/bills/settlement';
   /// 정산 상세 조회 (GET)
   static String billsSettlementDetailPath(int settlementId) =>
@@ -84,6 +86,12 @@ class AppConfig {
       '/bills/settlement/requested';
   /// 수정(PATCH)·삭제(DELETE) — `{billId}` 치환
   static String billsBillPath(int billId) => '/bills/$billId';
+  /// 변동 공과금 이번 달 금액 입력 PATCH
+  static String billsBillPaymentAmountPath(int billId, String yearMonth) =>
+      '/bills/$billId/payments/$yearMonth/amount';
+  /// 납부 기록 정산 상태 토글 PATCH
+  static String billsPaymentSettlementStatusPath(int paymentId) =>
+      '/bills/payments/$paymentId/settlement-status';
 
   /// 예약 목록 조회·예약 등록 (`GET`·`POST`, 쿼리 `startDate`·`endDate` / 본문 `itemId`·시간)
   static const String reservationsEndpoint = '/reservations';

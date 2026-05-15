@@ -36,7 +36,7 @@ class PartitionMainScreen extends StatefulWidget {
 }
 
 class _PartitionMainScreenState extends State<PartitionMainScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   /// 알림 패널이 완전히 열렸을 때 차지하는 높이 = 화면 세로의 이 비율 (고정 px 대비 짧은 기기 대응)
   static const double _alarmPanelOpenHeightFraction = 4 / 5;
 
@@ -253,6 +253,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -303,12 +304,20 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _fcmForegroundSub?.cancel();
     _panelController.removeListener(_handlePanelForAlarms);
     _glowController?.dispose();
     _panelController.dispose();
     _tabPageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      unawaited(context.read<HomeShareProvider>().initialize());
+    }
   }
 
   /// 하단바·딥링크에서 탭 전환 시 [PageView]와 상태를 맞춤.

@@ -17,7 +17,11 @@ class SharedExpenseTableItem {
 
   /// 공과금 API (`billId`, `utilityType`, 매월 결제일 1–31)
   final int? billId;
+  /// 납부 기록 ID (`GET /bills/payments`, 정산 요청 등)
+  final int? paymentId;
   final String? utilityTypeEnum;
+  /// 고정 공과금 여부 (목록에서 온 행만; null 이면 구버전/미표시).
+  final bool? utilityIsFixed;
   /// 구버전 세부 일자(있을 때만). 신규 API는 [utilityPayDay] 사용.
   final String? utilityDueDateIso;
   /// 매달 결제일(1–31). API `payDay`와 동일.
@@ -36,7 +40,9 @@ class SharedExpenseTableItem {
     this.minorCategory,
     this.detail,
     this.billId,
+    this.paymentId,
     this.utilityTypeEnum,
+    this.utilityIsFixed,
     this.utilityDueDateIso,
     this.utilityPayDay,
   });
@@ -61,7 +67,9 @@ class SharedExpenseTableItem {
     String? minorCategory,
     String? detail,
     int? billId,
+    int? paymentId,
     String? utilityTypeEnum,
+    bool? utilityIsFixed,
     String? utilityDueDateIso,
     int? utilityPayDay,
   }) {
@@ -78,7 +86,9 @@ class SharedExpenseTableItem {
       minorCategory: minorCategory ?? this.minorCategory,
       detail: detail ?? this.detail,
       billId: billId ?? this.billId,
+      paymentId: paymentId ?? this.paymentId,
       utilityTypeEnum: utilityTypeEnum ?? this.utilityTypeEnum,
+      utilityIsFixed: utilityIsFixed ?? this.utilityIsFixed,
       utilityDueDateIso: utilityDueDateIso ?? this.utilityDueDateIso,
       utilityPayDay: utilityPayDay ?? this.utilityPayDay,
     );

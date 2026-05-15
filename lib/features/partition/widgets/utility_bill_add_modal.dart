@@ -55,6 +55,7 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
   final Set<String> _selectedCodes = {};
 
   int _paymentDay = 1;
+  bool _utilityBillFixedType = true;
 
   bool _submitting = false;
 
@@ -162,24 +163,18 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
 
     final amountDigits =
         _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '').trim();
-    if (amountDigits.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('금액을 정수로 입력해 주세요.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-    final amountInt = int.tryParse(amountDigits);
-    if (amountInt == null || amountInt < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('금액은 1원 이상으로 입력해 주세요.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
+    int? amountInt;
+    if (amountDigits.isNotEmpty) {
+      amountInt = int.tryParse(amountDigits);
+      if (amountInt == null || amountInt < 1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('금액은 1원 이상의 정수로 입력해 주세요.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
     }
 
     final noteTrim = _remarkCtrl.text.trim();
@@ -214,6 +209,7 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
         await svc.createBill(
           utilityType: code,
           payDay: payDay,
+          isFixed: _utilityBillFixedType,
           amount: amountInt,
           note: noteTrim.isEmpty ? null : noteTrim,
         );
@@ -270,26 +266,22 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
 
     final amountDigits =
         _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '').trim();
-    if (amountDigits.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('금액을 정수로 입력해 주세요.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
+    int? parsedAmount;
+    if (amountDigits.isNotEmpty) {
+      parsedAmount = int.tryParse(amountDigits);
+      if (parsedAmount == null || parsedAmount < 1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('금액은 1원 이상의 정수로 입력해 주세요.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
     }
-    final amountInt = int.tryParse(amountDigits);
-    if (amountInt == null || amountInt < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('금액은 1원 이상으로 입력해 주세요.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-    final amountStr = _formatWonForTable(amountInt);
+    final amountStr = (parsedAmount != null && parsedAmount >= 1)
+        ? _formatWonForTable(parsedAmount)
+        : '미입력';
     final remarkTrim = _remarkCtrl.text.trim();
     final remarkForTable = remarkTrim.isEmpty ? '—' : remarkTrim;
 
@@ -310,6 +302,7 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
           amount: amountStr,
           quantity: remarkForTable,
           utilityPayDay: _paymentDay,
+          utilityIsFixed: _utilityBillFixedType,
         ),
       );
     }
@@ -523,7 +516,71 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
                               ),
                               const SizedBox(height: 14),
                               Text(
-                                '납부액',
+                                '금액 유형',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Pretendard Variable',
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  ChoiceChip(
+                                    label: Text(
+                                      '고정',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(
+                                          _utilityBillFixedType ? 1 : 0.55),
+                                        fontFamily: 'Pretendard Variable',
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    selected: _utilityBillFixedType,
+                                    selectedColor:
+                                        Colors.white.withOpacity(0.22),
+                                    backgroundColor:
+                                        Colors.white.withOpacity(0.06),
+                                    showCheckmark: false,
+                                    onSelected: (_) {
+                                      setState(
+                                          () => _utilityBillFixedType = true);
+                                    },
+                                  ),
+                                  ChoiceChip(
+                                    label: Text(
+                                      '변동',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(
+                                            !_utilityBillFixedType ? 1 : 0.55),
+                                        fontFamily: 'Pretendard Variable',
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    selected: !_utilityBillFixedType,
+                                    selectedColor:
+                                        Colors.white.withOpacity(0.22),
+                                    backgroundColor:
+                                        Colors.white.withOpacity(0.06),
+                                    showCheckmark: false,
+                                    onSelected: (_) {
+                                      setState(
+                                          () =>
+                                              _utilityBillFixedType = false);
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                _utilityBillFixedType
+                                    ? '납부액 (선택)'
+                                    : '납부액 (변동 시 선택 입력)',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.85),
@@ -562,7 +619,9 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
                                         fontFamily: 'Pretendard Variable',
                                       ),
                                       decoration: InputDecoration(
-                                        hintText: '정수만 입력 (원)',
+                                        hintText: _utilityBillFixedType
+                                            ? '정수만 입력 (생략 가능)'
+                                            : '이번 달만 반영할 때 입력',
                                         hintStyle: TextStyle(
                                           color: Colors.white.withOpacity(0.45),
                                           fontSize: 13,

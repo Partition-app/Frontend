@@ -4,10 +4,29 @@ import 'package:partition_app/core/network/api_client.dart';
 import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/features/partition/models/utility_bill_model.dart';
 
-/// 공과금 API (`/bills`, `/bills/categories`)
+/// 공과금 API (`/bills/**`, 종류 조회 포함)
 class UtilityBillService {
   final ApiClient _apiClient = ApiClient();
 
+  /// 해당 기간 `GET /bills/payments` 결과 중 선택한 공과금(`billIds`)의
+  /// `UNSETTLED` 납부 기록 `paymentId` (정산 POST 본문에 사용).
+  Future<List<int>> fetchUnsettledPaymentIds({
+    required String startDate,
+    required String endDate,
+    required Iterable<int> billIds,
+  }) async {
+    final want = billIds.map((e) => e).where((id) => id > 0).toSet();
+    if (want.isEmpty) return [];
+    final bundle = await fetchBillPayments(startDate: startDate, endDate: endDate);
+    final out = <int>[];
+    for (final p in bundle.payments) {
+      if (!want.contains(p.billId)) continue;
+      if (p.paymentId <= 0) continue;
+      if (p.status != 'UNSETTLED') continue;
+      out.add(p.paymentId);
+    }
+    return out;
+  }
   Future<List<UtilityBillCategory>> fetchCategories() async {
     try {
       final response =
@@ -64,17 +83,114 @@ class UtilityBillService {
     }
   }
 
+  /// GET `/api/bills/payments` — 공과금 납부 기록
+  Future<UtilityBillPaymentsResult> fetchBillPayments({
+    required String startDate,
+    required String endDate,
+  }) async {
+    try {
+      final response = await _apiClient.get(
+        AppConfig.billsPaymentsEndpoint,
+        queryParameters: {
+          'startDate': startDate,
+          'endDate': endDate,
+        },
+      );
+      final data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw ApiException(message: '공과금 납부 기록 응답 형식이 올바르지 않습니다.');
+      }
+      if (data['isSuccess'] != true) {
+        throw ApiException(
+          message:
+              data['message']?.toString() ?? '공과금 납부 기록 조회에 실패했습니다.',
+        );
+      }
+      final raw = data['result'];
+      if (raw is! Map<String, dynamic>) {
+        throw ApiException(message: '공과금 납부 기록 결과 형식이 올바르지 않습니다.');
+      }
+      return UtilityBillPaymentsResult.fromJson(raw);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// PATCH `/api/bills/{billId}/payments/{yearMonth}/amount` (`yyyy-MM`)
+  Future<UtilityBillVariableAmountPatchResult> patchBillVariableAmount({
+    required int billId,
+    required String yearMonth,
+    required int thisMonthAmount,
+  }) async {
+    if (billId <= 0) {
+      throw ApiException(message: '유효하지 않는 공과금입니다.');
+    }
+    try {
+      final response = await _apiClient.patch(
+        AppConfig.billsBillPaymentAmountPath(billId, yearMonth),
+        data: {'thisMonthAmount': thisMonthAmount},
+      );
+      final data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw ApiException(message: '공과금 금액 입력 응답 형식이 올바르지 않습니다.');
+      }
+      if (data['isSuccess'] != true) {
+        throw ApiException(
+          message: data['message']?.toString() ?? '공과금 금액 입력에 실패했습니다.',
+          statusCode: response.statusCode,
+        );
+      }
+      final raw = data['result'];
+      if (raw is! Map<String, dynamic>) {
+        throw ApiException(message: '공과금 금액 입력 결과가 비어 있습니다.');
+      }
+      return UtilityBillVariableAmountPatchResult.fromJson(raw);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// PATCH `/api/bills/payments/{paymentId}/settlement-status` (본문 명세 미정 — 서버 규격에 맞춰 확장 가능)
+  Future<void> patchBillPaymentSettlementStatus(
+    int paymentId, [
+    Map<String, dynamic>? body,
+  ]) async {
+    if (paymentId <= 0) {
+      throw ApiException(message: '유효하지 않는 납부 기록입니다.');
+    }
+    try {
+      final response = await _apiClient.patch(
+        AppConfig.billsPaymentSettlementStatusPath(paymentId),
+        data: body,
+      );
+      final data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw ApiException(message: '정산 상태 변경 응답 형식이 올바르지 않습니다.');
+      }
+      if (data['isSuccess'] != true) {
+        throw ApiException(
+          message: data['message']?.toString() ?? '정산 상태 변경에 실패했습니다.',
+          statusCode: response.statusCode,
+        );
+      }
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   /// POST /api/bills — 수동 등록 (`payDay`: 매달 해당 일에 결제)
   Future<UtilityBillCreateResult> createBill({
     required String utilityType,
     required int payDay,
-    required int amount,
+    required bool isFixed,
+    int? amount,
     String? note,
   }) async {
     try {
       final payload = <String, dynamic>{
         'utilityType': utilityType,
         'payDay': payDay,
+        'isFixed': isFixed,
         'amount': amount,
         'note': (note != null && note.trim().isNotEmpty) ? note.trim() : null,
       };
@@ -106,13 +222,15 @@ class UtilityBillService {
     required int billId,
     required String utilityType,
     required int payDay,
-    required int amount,
+    required bool isFixed,
+    int? amount,
     String? note,
   }) async {
     try {
       final payload = <String, dynamic>{
         'utilityType': utilityType,
         'payDay': payDay,
+        'isFixed': isFixed,
         'amount': amount,
         'note': (note != null && note.trim().isNotEmpty) ? note.trim() : null,
       };
@@ -193,13 +311,13 @@ class UtilityBillService {
     }
   }
 
-  /// 공과금 **정산 요청** — `POST /api/bills/settlement` (`billIds`, `memberIds`).
+  /// 공과금 **정산 요청** — `POST /api/bills/settlement` (`paymentIds`, `memberIds`).
   /// 푸시 알림은 서버에서 발송; 단말은 `PATCH /users/me/fcm-token`으로 FCM 토큰을 등록해야 함.
   Future<BillSettlementRequestResult> requestBillSettlement({
-    required List<int> billIds,
+    required List<int> paymentIds,
     required List<int> memberIds,
   }) async {
-    if (billIds.isEmpty) {
+    if (paymentIds.isEmpty) {
       throw ApiException(message: '정산할 공과금을 선택해주세요.');
     }
     if (memberIds.isEmpty) {
@@ -209,7 +327,7 @@ class UtilityBillService {
       final response = await _apiClient.post(
         AppConfig.billsSettlementRequestEndpoint,
         data: {
-          'billIds': billIds,
+          'paymentIds': paymentIds,
           'memberIds': memberIds,
         },
       );

@@ -839,6 +839,10 @@ class _PartitionSharedExpenseScreenState
         isUtility: _filterIndex == 1,
         deletePurchasesViaApi: goodsFromApi,
         submitUtilityViaApi: utilityFromApi,
+        utilityPaymentsRangeStartIso:
+            utilityFromApi ? _dateToIso(_startDate) : null,
+        utilityPaymentsRangeEndIso:
+            utilityFromApi ? _dateToIso(_endDate) : null,
 
         /// 서버(공용소비) 물품도 표와 동일 목록을 넣어 [purchaseId]로 PATCH 수정 가능
         initialItems: List<SharedExpenseTableItem>.from(
@@ -1009,12 +1013,21 @@ class _PartitionSharedExpenseScreenState
     }
   }
 
+  Future<List<int>> _unsettledUtilityPaymentIdsForBillIds(
+      List<int> billIds) {
+    return _utilityBillService.fetchUnsettledPaymentIds(
+      startDate: _dateToIso(_startDate),
+      endDate: _dateToIso(_endDate),
+      billIds: billIds,
+    );
+  }
+
   Future<int> _requestUtilityBillSettlement({
-    required List<int> billIds,
+    required List<int> paymentIds,
   }) async {
     final memberIds = await _fetchHouseholdMemberIds();
     final req = await _utilityBillService.requestBillSettlement(
-      billIds: billIds,
+      paymentIds: paymentIds,
       memberIds: memberIds,
     );
     return req.settlementId;
@@ -1023,7 +1036,15 @@ class _PartitionSharedExpenseScreenState
   Future<void> _executeUtilityBillSettlementPostAndConfirm({
     required List<int> billIds,
   }) async {
-    final settlementId = await _requestUtilityBillSettlement(billIds: billIds);
+    final paymentIds = await _unsettledUtilityPaymentIdsForBillIds(billIds);
+    if (paymentIds.isEmpty) {
+      throw ApiException(
+        message:
+            '해당 기간에 정산 요청 가능한 미정산(UNSETTLED) 납부 기록이 없습니다. 공용소비 표의 기간이나 변동 공과금 금액 입력을 확인해 주세요.',
+      );
+    }
+    final settlementId =
+        await _requestUtilityBillSettlement(paymentIds: paymentIds);
     await _utilityBillService.confirmBillSettlement(settlementId);
     if (mounted) {
       context.read<AlarmNavigationController>().registerBillSettlementConfirmedForAlarmUi(
@@ -1056,7 +1077,7 @@ class _PartitionSharedExpenseScreenState
       barrierColor: Colors.black.withOpacity(0.35),
       builder: (ctx) => SharedExpenseItemDetailSheet(
         key: ValueKey(
-          '${item.purchaseId ?? item.billId ?? 'local'}_${globalIndex}_${item.manuallySettled}',
+          '${item.purchaseId ?? item.paymentId ?? item.billId ?? 'local'}_${globalIndex}_${item.manuallySettled}',
         ),
         item: item,
         isUtility: _filterIndex == 1,
@@ -1091,7 +1112,22 @@ class _PartitionSharedExpenseScreenState
                   if (utilityApi && bid != null && bid > 0) {
                     final agreed = await _confirmSettlementNotifyDialog();
                     if (agreed != true || !mounted) return;
-                    await _requestUtilityBillSettlement(billIds: [bid]);
+                    final paymentIds =
+                        await _unsettledUtilityPaymentIdsForBillIds([bid]);
+                    if (paymentIds.isEmpty) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            '정산할 미정산 납부 기록을 찾지 못했어요. 표 기간을 넓히거나 변동 공과금 금액을 입력한 뒤 다시 시도해 주세요.',
+                          ),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+                    await _requestUtilityBillSettlement(
+                        paymentIds: paymentIds);
                     if (!mounted) return;
                     Navigator.of(ctx).pop();
                     await _loadUtilityBills();
@@ -1627,7 +1663,7 @@ class _PartitionSharedExpenseScreenState
                               : pageItems
                                   .map(
                                     (e) =>
-                                        '${e.purchaseId ?? e.billId ?? e.name.hashCode}_${e.manuallySettled}',
+                                        '${e.purchaseId ?? e.paymentId ?? e.billId ?? e.name.hashCode}_${e.manuallySettled}',
                                   )
                                   .join('|');
                           return _SharedExpenseTableBody(
@@ -2438,7 +2474,19 @@ class _PartitionSharedExpenseScreenState
       final agreed = await _confirmSettlementNotifyDialog();
       if (agreed != true || !mounted) return;
       try {
-        await _requestUtilityBillSettlement(billIds: billIds);
+        final paymentIds = await _unsettledUtilityPaymentIdsForBillIds(billIds);
+        if (paymentIds.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '정산할 미정산 납부 기록이 없어요. 표 기간이나 변동 공과금 금액을 확인해 주세요.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        await _requestUtilityBillSettlement(paymentIds: paymentIds);
         if (!mounted) return;
         setState(() => _selectedRowIndices.clear());
         await _loadUtilityBills();
@@ -4259,7 +4307,11 @@ class _UtilityBillSettlementFlowDialogState
 
   int? _parseAmountToWon(String amount) {
     final t = amount.trim();
-    if (t.isEmpty || t.contains('알 수 없음')) return null;
+    if (t.isEmpty ||
+        t.contains('알 수 없음') ||
+        t.contains('미입력')) {
+      return null;
+    }
     final man = RegExp(r'(\d+)\s*만').firstMatch(t);
     if (man != null) {
       final v = int.tryParse(man.group(1)!);
@@ -4835,22 +4887,22 @@ class _UtilityBillSettlementFlowDialogState
                   return;
                 }
 
-                final billIds = <int>[];
+                final paymentIds = <int>[];
                 for (final line in _lines) {
                   if (!line.selected) continue;
-                  final bid = line.item.billId;
-                  if (bid == null || bid <= 0) {
+                  final pid = line.item.paymentId;
+                  if (pid == null || pid <= 0) {
                     messenger.showSnackBar(
                       const SnackBar(
                         content: Text(
-                          '선택한 항목 중 서버에 등록되지 않은 공과금이 있어요.',
+                          '선택한 항목에 납부 기록 ID가 없어요. 정산 대상 목록을 다시 불러온 뒤 선택해 주세요.',
                         ),
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
                     return;
                   }
-                  billIds.add(bid);
+                  paymentIds.add(pid);
                 }
 
                 final memberIds = <int>[];
@@ -4873,7 +4925,7 @@ class _UtilityBillSettlementFlowDialogState
                 try {
                   final result =
                       await _utilityBillService.requestBillSettlement(
-                    billIds: billIds,
+                    paymentIds: paymentIds,
                     memberIds: memberIds,
                   );
                   if (!context.mounted) return;
