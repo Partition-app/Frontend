@@ -16,6 +16,11 @@ enum AlarmNoticeType {
     'BILL_SETTLEMENT_CONFIRMED',
     '공과금 정산이 완료되었습니다.',
   ),
+  /// 변동 공과금 이번 달 금액 미입력 알림 (`referenceId` = `billId`)
+  billAmountInputRequired(
+    'BILL_AMOUNT_INPUT_REQUIRED',
+    '이번달 공과금을 입력해주세요.',
+  ),
   unknown('', '');
 
   const AlarmNoticeType(this.apiValue, this.defaultMessage);
@@ -45,6 +50,17 @@ enum AlarmNoticeType {
   bool get isSettlementRequestNotice =>
       this == AlarmNoticeType.supplySettlementRequested ||
       this == AlarmNoticeType.billSettlementRequested;
+
+  /// 서버 `type` 미등록 시 알림 문구로 공과금 금액 입력 알림을 추정합니다.
+  static bool messageLooksLikeUtilityBillAmountInput(String message) {
+    final n = message.replaceAll(RegExp(r'\s+'), '');
+    if (n.isEmpty) return false;
+    final hasBill = n.contains('공과금');
+    final asksInput =
+        n.contains('입력') || n.contains('입력해') || n.contains('입력해주');
+    final hasMonth = n.contains('이번달') || n.contains('이번');
+    return hasBill && asksInput && (hasMonth || n.contains('금액'));
+  }
 }
 
 class AlarmItem {
@@ -81,6 +97,25 @@ class AlarmItem {
   final DateTime createdAt;
 
   String get displayMessage => type.resolvedMessage(message);
+
+  /// 이번 달 공과금 금액 입력 모달을 열 수 있는 알림인지 여부.
+  bool get isUtilityBillAmountInputReminder {
+    if (type == AlarmNoticeType.billAmountInputRequired) return true;
+    final text = message.isNotEmpty ? message : displayMessage;
+    if (!AlarmNoticeType.messageLooksLikeUtilityBillAmountInput(text)) {
+      return false;
+    }
+    // 정산 알림 문구와 구분 — `referenceId`가 billId일 때만 모달로 연결
+    return referenceId != null && referenceId! > 0;
+  }
+
+  /// [isUtilityBillAmountInputReminder]일 때 `referenceId`를 `billId`로 사용합니다.
+  int? get utilityBillIdForAmountInput {
+    if (!isUtilityBillAmountInputReminder) return null;
+    final id = referenceId;
+    if (id == null || id <= 0) return null;
+    return id;
+  }
 
   AlarmItem copyWith({bool? isRead}) {
     return AlarmItem(

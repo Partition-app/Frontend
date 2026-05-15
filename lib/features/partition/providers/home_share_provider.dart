@@ -114,13 +114,16 @@ class HomeShareProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 서버 GET으로 동의·집 위치를 보강합니다. 로컬 ON 상태는 서버 미동기화 시 유지합니다.
+  /// 서버 GET으로 동의·집 위치를 보강합니다.
+  ///
+  /// - 로컬이 ON이면 서버가 false/null일 때 동의를 다시 등록합니다.
+  /// - 서버만 ON이고 로컬이 OFF면 **자동으로 켜지 않습니다** (가입 시 기본 OFF).
   Future<void> _syncFromServerIfPossible() async {
     final localEnabled = _isEnabled;
 
     try {
       final serverAgreed = await _service.fetchLocationConsent();
-      if (serverAgreed == true) {
+      if (serverAgreed == true && localEnabled) {
         _isEnabled = true;
         await StorageService.setSharingEnabled(true);
       } else if (serverAgreed == false && !localEnabled) {

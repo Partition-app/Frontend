@@ -1788,7 +1788,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                           ? Padding(
                               padding: const EdgeInsets.all(12),
                               child: Text(
-                                '등록된 예약 물품이 없습니다.\n아래 + 버튼으로 등록해 주세요.',
+                                '등록된 예약 물품이 없습니다.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.55),
@@ -2304,7 +2304,7 @@ class _ReservationItemManageDialogState
                       vertical: 14,
                     ),
                     child: Text(
-                      '등록된 예약 물품이 없습니다.\n먼저 추가 탭에서 물품을 등록해주세요.',
+                      '등록된 예약 물품이 없습니다.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.6),

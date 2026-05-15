@@ -25,6 +25,7 @@ import 'package:partition_app/features/partition/screens/partition_insight_resul
 import 'package:partition_app/features/partition/services/insights_query_service.dart';
 import 'package:partition_app/features/partition/providers/home_share_provider.dart';
 import 'package:partition_app/features/partition/theme/home_share_style.dart';
+import 'package:partition_app/features/partition/widgets/utility_bill_monthly_amount_modal.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 
 /// 파티션 메인 화면 - 4개의 탭으로 구성
@@ -174,6 +175,25 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
           );
       _switchToTab(1, animate: false);
       _closePanel();
+    } else if (item.isUtilityBillAmountInputReminder) {
+      final billId = item.utilityBillIdForAmountInput;
+      if (!mounted) return;
+      _closePanel();
+      if (billId != null) {
+        final saved = await showUtilityBillMonthlyAmountModal(
+          context,
+          billId: billId,
+        );
+        if (!mounted) return;
+        if (saved == true) {
+          _showAlarmApiFeedback('이번 달 공과금 금액을 저장했어요.', isError: false);
+        }
+      } else {
+        _showAlarmApiFeedback(
+          '공과금 정보를 확인할 수 없어요.',
+          isError: true,
+        );
+      }
     }
 
     if (item.isRead || _alarmMarkReadBusy.contains(item.alarmId)) return;
@@ -210,12 +230,21 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
     if (_tryHandleNearHomeArrivalFcm(message)) return;
 
     final data = message.data;
-    final sid = int.tryParse(
-      data['settlementId']?.toString() ?? data['referenceId']?.toString() ?? '',
-    );
     final typeStr =
         data['type']?.toString() ?? data['alarmType']?.toString() ?? '';
     final noticeType = AlarmNoticeType.parse(typeStr);
+    final msg = data['message']?.toString() ?? data['body']?.toString() ?? '';
+    if (_tryOpenUtilityBillAmountModalFromFcm(
+      noticeType: noticeType,
+      message: msg,
+      data: data,
+    )) {
+      return;
+    }
+
+    final sid = int.tryParse(
+      data['settlementId']?.toString() ?? data['referenceId']?.toString() ?? '',
+    );
     if (sid == null || sid <= 0 || noticeType == AlarmNoticeType.unknown) {
       return;
     }
@@ -228,6 +257,31 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
           ),
         );
     _switchToTab(1, animate: false);
+  }
+
+  bool _tryOpenUtilityBillAmountModalFromFcm({
+    required AlarmNoticeType noticeType,
+    required String message,
+    required Map<String, dynamic> data,
+  }) {
+    final isBillAmount = noticeType ==
+            AlarmNoticeType.billAmountInputRequired ||
+        AlarmNoticeType.messageLooksLikeUtilityBillAmountInput(message);
+    if (!isBillAmount) return false;
+
+    final billId = int.tryParse(
+      data['billId']?.toString() ??
+          data['referenceId']?.toString() ??
+          '',
+    );
+    if (billId == null || billId <= 0) return false;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _closePanel();
+      await showUtilityBillMonthlyAmountModal(context, billId: billId);
+    });
+    return true;
   }
 
   bool _tryHandleNearHomeArrivalFcm(RemoteMessage message) {
@@ -850,10 +904,13 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
         final item = _alarms[i];
-        final subLine = item.referenceId != null &&
-                item.type != AlarmNoticeType.unknown
-            ? '정산번호 ${item.referenceId} · ${_formatAlarmTime(item.createdAt)}'
-            : _formatAlarmTime(item.createdAt);
+        final subLine = item.isUtilityBillAmountInputReminder &&
+                item.referenceId != null
+            ? '공과금 · ${_formatAlarmTime(item.createdAt)}'
+            : item.referenceId != null &&
+                    item.type != AlarmNoticeType.unknown
+                ? '정산번호 ${item.referenceId} · ${_formatAlarmTime(item.createdAt)}'
+                : _formatAlarmTime(item.createdAt);
         final read = item.isRead;
         return ClipRRect(
           borderRadius: BorderRadius.circular(14),
