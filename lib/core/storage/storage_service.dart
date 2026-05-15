@@ -91,6 +91,37 @@ class StorageService {
     return _prefs?.getString('user_name');
   }
 
+  static Future<void> removeUserName() async {
+    await _prefs?.remove('user_name');
+  }
+
+  /// 앱 내 닉네임 입력(온보딩) 완료 여부 — 카카오 프로필 닉네임과 구분합니다.
+  static Future<bool> setNicknameSetupCompleted(bool completed) async {
+    return await _prefs?.setBool('nickname_setup_completed', completed) ??
+        false;
+  }
+
+  static bool isNicknameSetupCompleted() {
+    return _prefs?.getBool('nickname_setup_completed') ?? false;
+  }
+
+  /// 닉네임 입력 완료 여부 (기존 사용자 마이그레이션 포함).
+  static Future<bool> hasNicknameSetupCompleted() async {
+    if (isNicknameSetupCompleted()) return true;
+
+    final name = _prefs?.getString('user_name');
+    if (name == null || name.isEmpty) return false;
+
+    final role = getUserRole();
+    if (role == 'LEADER' ||
+        role == 'MEMBER' ||
+        await isOnboardingCompleted()) {
+      await setNicknameSetupCompleted(true);
+      return true;
+    }
+    return false;
+  }
+
   /// 카카오 로그인 응답의 `userRole` (LEADER / MEMBER / GUEST)을 저장.
   /// 새로고침 후에도 사용자가 "이미 가구에 속한 정상 사용자"인지 빠르게 판별하는 데 사용.
   static Future<bool> setUserRole(String role) async {
@@ -173,6 +204,10 @@ class StorageService {
 
   static Future<bool> setHomeAddress(String address) async {
     return await _prefs?.setString('home_address', address) ?? false;
+  }
+
+  static Future<void> clearHomeAddress() async {
+    await _prefs?.remove('home_address');
   }
 
   static String? getHomeAddress() {

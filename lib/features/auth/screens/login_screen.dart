@@ -157,13 +157,9 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           }
         } else if (mounted) {
-          final kakaoNickname =
-              user?.kakaoAccount?.profile?.nickname?.trim();
-          final existingName = await StorageService.getUserName();
-          if ((existingName == null || existingName.isEmpty) &&
-              kakaoNickname != null &&
-              kakaoNickname.isNotEmpty) {
-            await StorageService.setUserName(kakaoNickname);
+          // 카카오 프로필 닉네임은 저장하지 않음 — 회원가입(최초 로그인) 후 온보딩에서 입력
+          if (!await StorageService.hasNicknameSetupCompleted()) {
+            await StorageService.removeUserName();
           }
 
           final targetRoute = await AuthEntryRouteResolver.resolve();

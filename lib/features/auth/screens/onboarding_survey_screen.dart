@@ -49,6 +49,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
       if (response.isSuccess) {
         // 로컬 스토리지에도 저장 (API에서 이미 저장했지만 확실하게)
         await StorageService.setUserName(name);
+        await StorageService.setNicknameSetupCompleted(true);
 
         if (mounted) {
           // 그룹 선택 화면으로 이동

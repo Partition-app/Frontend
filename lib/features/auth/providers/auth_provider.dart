@@ -86,11 +86,13 @@ class AuthProvider extends ChangeNotifier {
       
       // GET /users/me 미구현 — 로컬 토큰·저장 이름으로만 세션 사용자 구성
       _user = await _authService.getUserInfo();
-      if (_user?.name != null && _user!.name!.isNotEmpty) {
+      if (_user?.name != null &&
+          _user!.name!.isNotEmpty &&
+          StorageService.isNicknameSetupCompleted()) {
         await StorageService.setUserName(_user!.name!);
         DebugHelper.log('✅ 저장된 사용자 이름 유지: ${_user!.name}');
       } else {
-        DebugHelper.log('세션 사용자 id: ${_user?.id} (이름은 온보딩 등에서 설정)');
+        DebugHelper.log('세션 사용자 id: ${_user?.id} (닉네임은 온보딩에서 설정)');
       }
       notifyListeners();
 
@@ -167,7 +169,8 @@ class AuthProvider extends ChangeNotifier {
     _user = userInfo;
     if (userInfo != null &&
         userInfo.name != null &&
-        userInfo.name!.isNotEmpty) {
+        userInfo.name!.isNotEmpty &&
+        StorageService.isNicknameSetupCompleted()) {
       await StorageService.setUserName(userInfo.name!);
     }
     notifyListeners();

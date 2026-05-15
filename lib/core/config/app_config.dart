@@ -138,8 +138,8 @@ class AppConfig {
   // ── 귀가 공유 (위치 기반 알림) ────────────────────────────────────────────
   /// 위치 공유 동의 저장/조회 (POST `{ agreed: bool }` · GET)
   static const String locationConsentEndpoint = '/households/location-consent';
-  /// 집 위치 저장(POST)·조회(GET). 조회 명세 경로 `/api/households/home-loc`
-  static const String homeLocationEndpoint = '/households/home-loc';
+  /// 집 위치 저장(POST)·조회(GET) — `/api/households/home-location`
+  static const String homeLocationEndpoint = '/households/home-location';
   /// 집 근처 진입 이벤트 — POST 전송 · GET 룸메이트 귀가 현황 조회
   static const String nearHomeEventEndpoint = '/households/location-events/near-home';
 

@@ -717,7 +717,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
             ),
             const SizedBox(height: 8),
             const Text(
-              '집안일을 고른 뒤 캘린더에서 날짜를 드래그해 선택하세요',
+              '집안일을 고른 뒤 캘린더에서\n날짜를 드래그해 선택하세요',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white,

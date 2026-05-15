@@ -155,6 +155,29 @@ class HomeShareProvider extends ChangeNotifier {
     }
   }
 
+  /// 서버에 이미 저장된 집 좌표를 로컬에 반영합니다(추가 POST 없음).
+  Future<void> adoptServerHomeLocation({
+    required double lat,
+    required double lng,
+    required double radius,
+  }) async {
+    _homeLocation = (lat: lat, lng: lng, radius: radius);
+    await StorageService.setHomeLocation(lat, lng, radius);
+    _homeAddress = null;
+    await StorageService.clearHomeAddress();
+    final address = await GeocodingService.reverseGeocode(lat, lng);
+    if (address != null) {
+      _homeAddress = address;
+      await StorageService.setHomeAddress(address);
+    }
+    notifyListeners();
+  }
+
+  /// UI용 집 위치 스냅샷(최신 서버 상태).
+  Future<HouseLocServerSnapshot> fetchHomeLocationSnapshot() async {
+    return _service.fetchHomeLocationSnapshot();
+  }
+
   /// 가구 공용 집 좌표를 서버에서 가져옵니다 (2번째 사용자 등 로컬 미설정 시).
   Future<bool> _ensureHomeLocationFromServer() async {
     if (_homeLocation != null) return true;

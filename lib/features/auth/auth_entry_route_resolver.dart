@@ -41,18 +41,10 @@ class AuthEntryRouteResolver {
     // 다른 기기에서 그룹 나가기 등 — 서버에 가구 없으면 로컬 캐시 정리
     await StorageService.clearHouseholdAffiliation();
 
-    String? userName = await StorageService.getUserName();
-    if (userName == null || userName.isEmpty) {
-      final userInfo = await authService.getUserInfo();
-      userName = userInfo?.name;
-      if (userName != null && userName.isNotEmpty) {
-        await StorageService.setUserName(userName);
-      }
+    // 카카오 프로필 닉네임이 아닌, 앱에서 직접 입력한 닉네임이 있을 때만 그룹 선택으로
+    if (!await StorageService.hasNicknameSetupCompleted()) {
+      return AppRouter.onboardingSurvey;
     }
-
-    if (userName != null && userName.isNotEmpty) {
-      return AppRouter.groupSelection;
-    }
-    return AppRouter.onboardingSurvey;
+    return AppRouter.groupSelection;
   }
 }

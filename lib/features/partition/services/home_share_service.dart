@@ -5,7 +5,7 @@ import 'package:partition_app/core/network/api_exception.dart';
 
 /// 귀가 공유 — 집 근처 도착 이벤트 전송 및 위치 공유 동의 관리
 ///
-/// Spring API: `POST·GET /households/location-consent`, `POST·GET /households/home-loc`,
+/// Spring API: `POST·GET /households/location-consent`, `POST·GET /households/home-location`,
 /// `POST·GET /households/location-events/near-home` ([AppConfig] baseUrl에 `/api` 포함).
 class HomeShareService {
   final ApiClient _apiClient = ApiClient();
@@ -117,7 +117,7 @@ class HomeShareService {
     }
   }
 
-  /// GET `/households/home-loc`
+  /// GET `/households/home-location`
   ///
   /// - [coordinates] 가 null이 아니면 등록 좌표
   /// - [coordinates] 가 null이면 서버 미등록(`result: null` 또는 404/`HOUSEHOLD_4005` 등)
