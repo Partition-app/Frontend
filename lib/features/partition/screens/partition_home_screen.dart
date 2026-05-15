@@ -611,6 +611,7 @@ class _HomeShareCardBody extends StatelessWidget {
                         duration: const Duration(milliseconds: 220),
                         width: 50,
                         height: 28,
+                        padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
                           color: enabled
@@ -622,32 +623,29 @@ class _HomeShareCardBody extends StatelessWidget {
                                 : Colors.white.withOpacity(0.22),
                           ),
                         ),
-                        child: Stack(
-                          children: [
-                            AnimatedPositioned(
-                              duration: const Duration(milliseconds: 220),
-                              curve: Curves.easeInOut,
-                              top: 3,
-                              left: enabled ? 22 : 3,
-                              child: Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: enabled
-                                      ? HomeShareStyle.main
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(11),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
+                        child: AnimatedAlign(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeInOut,
+                          alignment: enabled
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: enabled
+                                  ? HomeShareStyle.main
+                                  : Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.18),
+                                  blurRadius: 4,
+                                  offset: Offset.zero,
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),

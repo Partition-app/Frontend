@@ -25,6 +25,7 @@ import 'package:partition_app/features/partition/screens/partition_insight_resul
 import 'package:partition_app/features/partition/services/insights_query_service.dart';
 import 'package:partition_app/features/partition/providers/home_share_provider.dart';
 import 'package:partition_app/features/partition/theme/home_share_style.dart';
+import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 import 'package:partition_app/features/partition/widgets/utility_bill_monthly_amount_modal.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 
@@ -1323,6 +1324,10 @@ class _UnifiedNavClipper extends CustomClipper<Path> {
 /// 사용자 지정 액센트 (#FFFDCB, 불투명)
 const Color _kPartitionAiCream = Color(0xFFFFFDCB);
 
+/// AI 질문 모달 — 외곽·내부 모서리 (파티션 UI 토큰과 동일)
+const double _kAiModalRadius = PartitionUiTokens.modalRadius;
+const double _kAiModalInnerRadius = PartitionUiTokens.fieldRadius;
+
 class _PartitionAiModal extends StatefulWidget {
   const _PartitionAiModal();
 
@@ -1736,7 +1741,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
   Widget _buildCard() {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(_kAiModalRadius),
         border: Border.all(
           color: Colors.white.withOpacity(0.5),
           width: 0.5,
@@ -1759,7 +1764,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(_kAiModalRadius),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
@@ -1852,12 +1857,12 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
             border: Border.all(color: Colors.white.withOpacity(0.14)),
           ),
           child: Column(
@@ -1895,7 +1900,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
       height: 42,
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
         border: Border.all(color: Colors.white.withOpacity(0.14)),
       ),
       child: Row(
@@ -1919,7 +1924,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
             color: isSelected
                 ? Colors.white.withOpacity(0.18)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -1947,7 +1952,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
         Container(
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
             border: Border.all(color: Colors.white.withOpacity(0.18)),
           ),
           child: TextField(
@@ -1998,8 +2003,8 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
       children: [
         Text(
           kIsWeb
-              ? '브라우저에서 마이크를 허용하면 녹음됩니다. (HTTPS 또는 localhost 필요)'
-              : '마이크로 녹음한 파일을 서버로 보내 분석합니다.',
+              ? '브라우저에서 마이크를 허용하면 녹음됩니다.'
+              : '마이크로 녹음한 파일을 AI가 분석합니다.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white.withOpacity(0.52),
@@ -2027,7 +2032,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
                       )
                     : Icon(
                         Icons.fiber_manual_record,
-                        color: Colors.redAccent.withOpacity(0.9),
+                        color: _kPartitionAiCream.withOpacity(0.95),
                         size: 18,
                       ),
                 label: Text(_micBusy ? '준비 중…' : '녹음 시작'),
@@ -2035,6 +2040,10 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
                   foregroundColor: Colors.white,
                   side: BorderSide(color: Colors.white.withOpacity(0.28)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(_kAiModalInnerRadius),
+                  ),
                 ),
               ),
             ),
@@ -2062,6 +2071,10 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
                   disabledIconColor: Colors.white.withOpacity(0.42),
                   side: BorderSide(color: Colors.white.withOpacity(0.28)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(_kAiModalInnerRadius),
+                  ),
                 ),
               ),
             ),
@@ -2085,7 +2098,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
           Row(
             children: [
               Icon(Icons.check_circle,
-                  color: Colors.greenAccent.withOpacity(0.85), size: 18),
+                  color: _kPartitionAiCream.withOpacity(0.92), size: 18),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -2109,7 +2122,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
         Container(
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
             border: Border.all(color: Colors.white.withOpacity(0.18)),
           ),
           child: TextField(
@@ -2154,7 +2167,7 @@ class _PartitionAiModalState extends State<_PartitionAiModal> {
         foregroundColor: const Color(0xFF1A2F42),
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(_kAiModalInnerRadius),
         ),
         elevation: 0,
       ),
