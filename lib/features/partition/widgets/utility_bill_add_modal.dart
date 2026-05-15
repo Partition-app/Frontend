@@ -472,46 +472,9 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
                               ),
                               const SizedBox(height: 6),
                               Center(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color:
-                                          Colors.white.withOpacity(0.45),
-                                    ),
-                                    color: Colors.white.withOpacity(0.1),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<int>(
-                                      value: _paymentDay,
-                                      dropdownColor: const Color(0xE6282835),
-                                      iconEnabledColor: Colors.white70,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontFamily: 'Pretendard Variable',
-                                      ),
-                                      items: List.generate(
-                                        31,
-                                        (i) => DropdownMenuItem(
-                                          value: i + 1,
-                                          child: Text('매월 ${i + 1}일'),
-                                        ),
-                                      ),
-                                      onChanged: _submitting
-                                          ? null
-                                          : (v) {
-                                              if (v != null) {
-                                                setState(
-                                                    () => _paymentDay = v);
-                                              }
-                                            },
-                                    ),
-                                  ),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: _buildGlassUtilityPayDayDropdown(),
                                 ),
                               ),
                               const SizedBox(height: 14),
@@ -526,56 +489,7 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: [
-                                  ChoiceChip(
-                                    label: Text(
-                                      '고정',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(
-                                          _utilityBillFixedType ? 1 : 0.55),
-                                        fontFamily: 'Pretendard Variable',
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    selected: _utilityBillFixedType,
-                                    selectedColor:
-                                        Colors.white.withOpacity(0.22),
-                                    backgroundColor:
-                                        Colors.white.withOpacity(0.06),
-                                    showCheckmark: false,
-                                    onSelected: (_) {
-                                      setState(
-                                          () => _utilityBillFixedType = true);
-                                    },
-                                  ),
-                                  ChoiceChip(
-                                    label: Text(
-                                      '변동',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(
-                                            !_utilityBillFixedType ? 1 : 0.55),
-                                        fontFamily: 'Pretendard Variable',
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    selected: !_utilityBillFixedType,
-                                    selectedColor:
-                                        Colors.white.withOpacity(0.22),
-                                    backgroundColor:
-                                        Colors.white.withOpacity(0.06),
-                                    showCheckmark: false,
-                                    onSelected: (_) {
-                                      setState(
-                                          () =>
-                                              _utilityBillFixedType = false);
-                                    },
-                                  ),
-                                ],
-                              ),
+                              _buildGlassUtilityAmountTypeToggle(),
                               const SizedBox(height: 14),
                               Text(
                                 _utilityBillFixedType
@@ -722,6 +636,142 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
                               ),
                       ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _glassPanelBlur({
+    required Widget child,
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.42)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.16),
+                Colors.white.withOpacity(0.05),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.14),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassUtilityPayDayDropdown() {
+    return _glassPanelBlur(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _paymentDay,
+          isExpanded: true,
+          dropdownColor: const Color(0xE6282835),
+          iconEnabledColor: Colors.white70,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontFamily: 'Pretendard Variable',
+          ),
+          items: List.generate(
+            31,
+            (i) => DropdownMenuItem(
+              value: i + 1,
+              child: Text('매월 ${i + 1}일'),
+            ),
+          ),
+          onChanged: _submitting
+              ? null
+              : (v) {
+                  if (v != null) {
+                    setState(() => _paymentDay = v);
+                  }
+                },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassUtilityAmountTypeToggle() {
+    final disabled = _submitting;
+    return _glassPanelBlur(
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _glassTogglePill(
+              label: '고정',
+              selected: _utilityBillFixedType,
+              onTap: disabled ? null : () => setState(() => _utilityBillFixedType = true),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _glassTogglePill(
+              label: '변동',
+              selected: !_utilityBillFixedType,
+              onTap: disabled ? null : () => setState(() => _utilityBillFixedType = false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _glassTogglePill({
+    required String label,
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withOpacity(0.78)
+                  : Colors.white.withOpacity(0.22),
+              width: selected ? 1.1 : 0.5,
+            ),
+            color: selected
+                ? Colors.white.withOpacity(0.24)
+                : Colors.white.withOpacity(0.04),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(selected ? 1 : 0.55),
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Pretendard Variable',
+              fontSize: 14,
+            ),
           ),
         ),
       ),

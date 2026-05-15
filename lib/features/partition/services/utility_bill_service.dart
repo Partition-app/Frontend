@@ -8,6 +8,30 @@ import 'package:partition_app/features/partition/models/utility_bill_model.dart'
 class UtilityBillService {
   final ApiClient _apiClient = ApiClient();
 
+  /// POST/PATCH 본문 — `amount`·`note`는 값이 있을 때만 키를 넣음 (`null` JSON 키는
+  /// 일부 Spring 구현에서 500으로 이어질 수 있음).
+  static Map<String, dynamic> billUpsertPayload({
+    required String utilityType,
+    required int payDay,
+    required bool isFixed,
+    int? amount,
+    String? note,
+  }) {
+    final m = <String, dynamic>{
+      'utilityType': utilityType,
+      'payDay': payDay,
+      'isFixed': isFixed,
+    };
+    if (amount != null) {
+      m['amount'] = amount;
+    }
+    final n = note?.trim();
+    if (n != null && n.isNotEmpty) {
+      m['note'] = n;
+    }
+    return m;
+  }
+
   /// 해당 기간 `GET /bills/payments` 결과 중 선택한 공과금(`billIds`)의
   /// `UNSETTLED` 납부 기록 `paymentId` (정산 POST 본문에 사용).
   Future<List<int>> fetchUnsettledPaymentIds({
@@ -187,13 +211,13 @@ class UtilityBillService {
     String? note,
   }) async {
     try {
-      final payload = <String, dynamic>{
-        'utilityType': utilityType,
-        'payDay': payDay,
-        'isFixed': isFixed,
-        'amount': amount,
-        'note': (note != null && note.trim().isNotEmpty) ? note.trim() : null,
-      };
+      final payload = billUpsertPayload(
+        utilityType: utilityType,
+        payDay: payDay,
+        isFixed: isFixed,
+        amount: amount,
+        note: note,
+      );
       final response = await _apiClient.post(
         AppConfig.billsEndpoint,
         data: payload,
@@ -227,13 +251,13 @@ class UtilityBillService {
     String? note,
   }) async {
     try {
-      final payload = <String, dynamic>{
-        'utilityType': utilityType,
-        'payDay': payDay,
-        'isFixed': isFixed,
-        'amount': amount,
-        'note': (note != null && note.trim().isNotEmpty) ? note.trim() : null,
-      };
+      final payload = billUpsertPayload(
+        utilityType: utilityType,
+        payDay: payDay,
+        isFixed: isFixed,
+        amount: amount,
+        note: note,
+      );
       final response = await _apiClient.patch(
         AppConfig.billsBillPath(billId),
         data: payload,

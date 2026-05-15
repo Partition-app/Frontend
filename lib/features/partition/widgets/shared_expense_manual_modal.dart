@@ -1346,7 +1346,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      _glassFormField(child: _buildUtilityPayDayDropdown()),
+                      _buildUtilityPayDayGlassDropdown(),
                       const SizedBox(height: 10),
                       Align(
                         alignment: Alignment.centerLeft,
@@ -1361,50 +1361,7 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 6,
-                        children: [
-                          ChoiceChip(
-                            label: Text(
-                              '고정 금액',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(
-                                    _utilityIsFixed ? 1 : 0.55),
-                                fontFamily: 'Pretendard Variable',
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            selected: _utilityIsFixed,
-                            selectedColor:
-                                Colors.white.withOpacity(0.22),
-                            backgroundColor:
-                                Colors.white.withOpacity(0.06),
-                            onSelected: (_) {
-                              setState(() => _utilityIsFixed = true);
-                            },
-                          ),
-                          ChoiceChip(
-                            label: Text(
-                              '변동 금액',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(
-                                    !_utilityIsFixed ? 1 : 0.55),
-                                fontFamily: 'Pretendard Variable',
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            selected: !_utilityIsFixed,
-                            selectedColor:
-                                Colors.white.withOpacity(0.22),
-                            backgroundColor:
-                                Colors.white.withOpacity(0.06),
-                            onSelected: (_) {
-                              setState(() => _utilityIsFixed = false);
-                            },
-                          ),
-                        ],
-                      ),
+                      _buildUtilityAmountTypeGlassToggle(),
                       const SizedBox(height: 10),
                     ] else ...[
                       _buildDatePickerField(hint: '구매일 선택'),
@@ -1577,31 +1534,139 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
     );
   }
 
-  Widget _buildUtilityPayDayDropdown() {
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<int>(
-        value: _utilityPayDay.clamp(1, 31),
-        isExpanded: true,
-        dropdownColor: const Color(0xE6282835),
-        iconEnabledColor: Colors.white70,
-        style: _inputStyle,
-        items: List.generate(
-          31,
-          (i) => DropdownMenuItem(
-            value: i + 1,
-            child: Text(
-              '매월 ${i + 1}일',
-              style: _inputStyle,
+  Widget _utilityBillGlassBlurShell({
+    required Widget child,
+    EdgeInsetsGeometry padding = EdgeInsets.zero,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.42)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withOpacity(0.14),
+                Colors.white.withOpacity(0.05),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.12),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUtilityPayDayGlassDropdown() {
+    final busy = _submittingPurchase || _submittingUtilityBill;
+    return _utilityBillGlassBlurShell(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _utilityPayDay.clamp(1, 31),
+          isExpanded: true,
+          dropdownColor: const Color(0xE6282835),
+          iconEnabledColor: Colors.white70,
+          style: _inputStyle,
+          items: List.generate(
+            31,
+            (i) => DropdownMenuItem(
+              value: i + 1,
+              child: Text(
+                '매월 ${i + 1}일',
+                style: _inputStyle,
+              ),
+            ),
+          ),
+          onChanged: busy
+              ? null
+              : (v) {
+                  if (v != null) {
+                    setState(() => _utilityPayDay = v);
+                  }
+                },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUtilityAmountTypeGlassToggle() {
+    final busy = _submittingPurchase || _submittingUtilityBill;
+    return _utilityBillGlassBlurShell(
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _utilityAmountTypePill(
+              label: '고정 금액',
+              selected: _utilityIsFixed,
+              onTap: busy ? null : () => setState(() => _utilityIsFixed = true),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _utilityAmountTypePill(
+              label: '변동 금액',
+              selected: !_utilityIsFixed,
+              onTap: busy ? null : () => setState(() => _utilityIsFixed = false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _utilityAmountTypePill({
+    required String label,
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withOpacity(0.78)
+                  : Colors.white.withOpacity(0.22),
+              width: selected ? 1.1 : 0.5,
+            ),
+            color: selected
+                ? Colors.white.withOpacity(0.22)
+                : Colors.white.withOpacity(0.04),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(selected ? 1 : 0.55),
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Pretendard Variable',
+              fontSize: 13,
             ),
           ),
         ),
-        onChanged: (_submittingPurchase || _submittingUtilityBill)
-            ? null
-            : (v) {
-                if (v != null) {
-                  setState(() => _utilityPayDay = v);
-                }
-              },
       ),
     );
   }
