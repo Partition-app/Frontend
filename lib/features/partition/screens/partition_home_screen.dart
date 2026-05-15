@@ -319,13 +319,26 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
             ),
             const SizedBox(height: 26),
             RepaintBoundary(
-              child: SizedBox(
-                width: double.infinity,
-                height: 382,
-                child: HomeCalendarWidget(
-                  key: _calendarKey,
-                  onDateSelected: _onDateSelected,
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final calWidth = HomeCalendarWidget.resolveContentWidth(
+                    constraints.maxWidth,
+                  );
+                  final calHeight = HomeCalendarWidget.resolveMonthViewHeight(
+                    outerWidth: calWidth,
+                  );
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: calWidth,
+                      height: calHeight,
+                      child: HomeCalendarWidget(
+                        key: _calendarKey,
+                        onDateSelected: _onDateSelected,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 10),

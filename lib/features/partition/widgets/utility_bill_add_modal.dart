@@ -6,6 +6,7 @@ import 'package:partition_app/features/partition/models/shared_expense_table_ite
 import 'package:partition_app/features/partition/models/utility_bill_model.dart';
 import 'package:partition_app/features/partition/services/utility_bill_service.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
+import 'package:partition_app/features/partition/widgets/utility_pay_day_glass_picker.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 
 /// 공과금 추가하기 — 더미: 항목 다중 선택 + 매월 납부일 / API: 카테고리 조회 + 매달 payDay + POST
@@ -678,33 +679,44 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
   }
 
   Widget _buildGlassUtilityPayDayDropdown() {
+    final day = _paymentDay.clamp(1, 31);
+    const labelStyle = TextStyle(
+      color: Colors.white,
+      fontSize: 14,
+      fontFamily: 'Pretendard Variable',
+    );
     return _glassPanelBlur(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _paymentDay,
-          isExpanded: true,
-          dropdownColor: const Color(0xE6282835),
-          iconEnabledColor: Colors.white70,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontFamily: 'Pretendard Variable',
-          ),
-          items: List.generate(
-            31,
-            (i) => DropdownMenuItem(
-              value: i + 1,
-              child: Text('매월 ${i + 1}일'),
-            ),
-          ),
-          onChanged: _submitting
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _submitting
               ? null
-              : (v) {
-                  if (v != null) {
-                    setState(() => _paymentDay = v);
+              : () async {
+                  final picked = await showGlassUtilityPayDayPicker(
+                    context,
+                    currentDay: day,
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _paymentDay = picked);
                   }
                 },
+          borderRadius: BorderRadius.circular(14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '매월 $day일',
+                  style: labelStyle,
+                ),
+              ),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withOpacity(_submitting ? 0.35 : 0.85),
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -712,27 +724,27 @@ class _UtilityBillAddModalState extends State<UtilityBillAddModal> {
 
   Widget _buildGlassUtilityAmountTypeToggle() {
     final disabled = _submitting;
-    return _glassPanelBlur(
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          Expanded(
-            child: _glassTogglePill(
-              label: '고정',
-              selected: _utilityBillFixedType,
-              onTap: disabled ? null : () => setState(() => _utilityBillFixedType = true),
-            ),
+    return Row(
+      children: [
+        Expanded(
+          child: _glassTogglePill(
+            label: '고정',
+            selected: _utilityBillFixedType,
+            onTap:
+                disabled ? null : () => setState(() => _utilityBillFixedType = true),
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _glassTogglePill(
-              label: '변동',
-              selected: !_utilityBillFixedType,
-              onTap: disabled ? null : () => setState(() => _utilityBillFixedType = false),
-            ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _glassTogglePill(
+            label: '변동',
+            selected: !_utilityBillFixedType,
+            onTap: disabled
+                ? null
+                : () => setState(() => _utilityBillFixedType = false),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

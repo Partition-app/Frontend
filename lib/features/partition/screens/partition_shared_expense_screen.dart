@@ -26,6 +26,8 @@ import 'package:partition_app/features/partition/services/utility_bill_service.d
 import 'package:partition_app/features/partition/models/supply_category_model.dart';
 import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/shared/utils/partition_dummy_data_policy.dart';
+import 'package:partition_app/features/partition/theme/home_share_style.dart';
+import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 
 class PartitionSharedExpenseScreen extends StatefulWidget {
   const PartitionSharedExpenseScreen({super.key});
@@ -37,6 +39,8 @@ class PartitionSharedExpenseScreen extends StatefulWidget {
 
 class _PartitionSharedExpenseScreenState
     extends State<PartitionSharedExpenseScreen> {
+  static const Color _destructiveMuted = Color(0xFFD88A94);
+
   // Constants — 본문 영역 높이(상태줄 제외). 기존 125의 약 0.7로 얇게.
   static const double _headerHeight = 87.5;
   static const double _contentPaddingHorizontal = 16.0;
@@ -391,7 +395,7 @@ class _PartitionSharedExpenseScreenState
                           statusLabel,
                           style: TextStyle(
                             color: statusAccent
-                                ? const Color.fromRGBO(198, 255, 214, 1)
+                                ? HomeShareStyle.point
                                 : Colors.white.withOpacity(0.78),
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -409,11 +413,11 @@ class _PartitionSharedExpenseScreenState
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(999),
                       color: statusAccent
-                          ? const Color.fromRGBO(132, 240, 174, 0.14)
+                          ? HomeShareStyle.pointFillSoft(0.16)
                           : Colors.white.withOpacity(0.08),
                       border: Border.all(
                         color: statusAccent
-                            ? const Color.fromRGBO(188, 255, 212, 0.24)
+                            ? HomeShareStyle.pointStroke(0.32)
                             : Colors.white.withOpacity(0.12),
                         width: 0.5,
                       ),
@@ -422,7 +426,7 @@ class _PartitionSharedExpenseScreenState
                       statusAccent ? '완료' : '진행 중',
                       style: TextStyle(
                         color: statusAccent
-                            ? const Color.fromRGBO(214, 255, 226, 1)
+                            ? HomeShareStyle.point
                             : Colors.white.withOpacity(0.8),
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -1578,8 +1582,6 @@ class _PartitionSharedExpenseScreenState
     );
     final tablePageIndexSafe =
         _tablePageIndex.clamp(0, tablePages.length - 1).toInt();
-    final selectionAllSettled = _selectedRowsAreAllSettled();
-
     return FrostedPanel(
       borderRadius: BorderRadius.circular(_borderRadiusLarge),
       backgroundOpacity: 0.0,
@@ -1707,7 +1709,7 @@ class _PartitionSharedExpenseScreenState
               ],
             ),
           ),
-          // 표 아래: 왼쪽 = 선택 모드 진입·종료, 오른쪽 = `+`(직접 추가) 또는 전체선택·삭제·정산 표시
+          // 표 아래: 왼쪽 = 선택 모드 진입·종료, 오른쪽 = `+`(직접 추가) 또는 전체선택·삭제
           // 가로 패딩은 표 FrostedPanel(6)과 같게 — 오른쪽 끝 버튼이 표 수량 열과 세로 정렬
           const SizedBox(height: 12),
           Padding(
@@ -1717,7 +1719,7 @@ class _PartitionSharedExpenseScreenState
               children: [
                 Tooltip(
                   message:
-                      _tableSelectionMode ? '선택 종료' : '여러 항목 선택 후 정산 요청·삭제',
+                      _tableSelectionMode ? '선택 종료' : '여러 항목 선택 후 삭제',
                   child: _buildCircleArrow(
                     _tableSelectionMode
                         ? Icons.close_rounded
@@ -1741,17 +1743,10 @@ class _PartitionSharedExpenseScreenState
                             '전체선택',
                             _selectAllRowsInFilter,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 10),
                           _buildSelectionActionChip(
                             '삭제',
                             () => _deleteSelectedRows(),
-                          ),
-                          const SizedBox(width: 6),
-                          _buildSelectionActionChip(
-                            selectionAllSettled ? '정산 해제' : '정산 요청',
-                            selectionAllSettled
-                                ? _cancelSettlementSelectedRows
-                                : _settleSelectedRows,
                           ),
                         ],
                       ),
@@ -2164,18 +2159,18 @@ class _PartitionSharedExpenseScreenState
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(23),
         splashColor: Colors.white.withOpacity(0.12),
         highlightColor: Colors.white.withOpacity(0.06),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(23),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
             child: Container(
-              constraints: const BoxConstraints(minHeight: 34),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(23),
                 color: Colors.white.withOpacity(0.08),
                 border: Border.all(
                   color: Colors.white.withOpacity(0.85),
@@ -2188,7 +2183,7 @@ class _PartitionSharedExpenseScreenState
                 softWrap: false,
                 style: const TextStyle(
                   fontFamily: 'Pretendard Variable',
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
                   height: 1.2,
@@ -2245,32 +2240,135 @@ class _PartitionSharedExpenseScreenState
     await _deleteRowsAtIndices(Set<int>.from(_selectedRowIndices));
   }
 
+  /// 설정 모달과 동일한 글래스 확인 다이얼로그.
+  Future<bool> _confirmGlassDialog({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool destructive = false,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.55),
+      builder: (ctx) => PartitionGlassDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        constraints: const BoxConstraints(maxWidth: 360),
+        borderRadius: BorderRadius.circular(24),
+        blurSigma: 18,
+        fillColor: const Color.fromRGBO(255, 255, 255, 0.12),
+        borderColor: const Color.fromRGBO(255, 255, 255, 0.22),
+        gradient: const LinearGradient(
+          colors: [Colors.transparent, Colors.transparent],
+        ),
+        boxShadow: const [],
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const SizedBox(width: 40),
+                Expanded(
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+                ),
+                PartitionModalCloseButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  color: Colors.white.withOpacity(0.88),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.82),
+                fontSize: 14,
+                height: 1.45,
+                fontFamily: 'Pretendard Variable',
+              ),
+            ),
+            const SizedBox(height: 20),
+            _confirmGlassDialogButton(
+              label: '취소',
+              foregroundColor: PartitionUiTokens.actionText,
+              onTap: () => Navigator.of(ctx).pop(false),
+            ),
+            const SizedBox(height: 10),
+            _confirmGlassDialogButton(
+              label: confirmLabel,
+              foregroundColor:
+                  destructive ? _destructiveMuted : PartitionUiTokens.actionText,
+              onTap: () => Navigator.of(ctx).pop(true),
+            ),
+          ],
+        ),
+      ),
+    );
+    return ok == true;
+  }
+
+  Widget _confirmGlassDialogButton({
+    required String label,
+    required Color foregroundColor,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: PartitionUiTokens.actionButtonHeight,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius:
+              BorderRadius.circular(PartitionUiTokens.actionButtonRadius),
+          onTap: onTap,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(
+                PartitionUiTokens.actionButtonRadius,
+              ),
+              border: Border.all(color: Colors.white.withOpacity(0.18)),
+              color: Colors.white.withOpacity(0.05),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: foregroundColor,
+                fontSize: PartitionUiTokens.actionFontSize,
+                fontWeight: PartitionUiTokens.actionWeight,
+                fontFamily: 'Pretendard Variable',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteRowsAtIndices(Set<int> indices) async {
     if (indices.isEmpty) return;
     final count = indices.length;
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2A2A),
-        title: const Text('삭제', style: TextStyle(color: Colors.white)),
-        content: Text(
-          '선택한 $count개 항목을 삭제할까요?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
+    final message = count == 1
+        ? '이 항목을 삭제할까요?'
+        : '선택한 $count개 항목을 삭제할까요?';
+    final ok = await _confirmGlassDialog(
+      title: '삭제',
+      message: message,
+      confirmLabel: '삭제',
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
 
     final goodsApi = _filterIndex == 0 && _useGoodsPurchasesApi(context);
     if (goodsApi) {
@@ -2386,193 +2484,6 @@ class _PartitionSharedExpenseScreenState
         const SnackBar(content: Text('선택한 항목을 삭제했어요.')),
       );
     }
-  }
-
-  /// 선택이 비어 있지 않고, 모두 정산 완료(`manuallySettled`)인 경우에만 true — 버튼을「정산 해제하기」로 쓸 때
-  bool _selectedRowsAreAllSettled() {
-    if (_selectedRowIndices.isEmpty) return false;
-    final list = _itemsForCurrentFilter();
-    for (final i in _selectedRowIndices) {
-      if (i < 0 || i >= list.length) return false;
-      if (!list[i].manuallySettled) return false;
-    }
-    return true;
-  }
-
-  Future<void> _settleSelectedRows() async {
-    if (_selectedRowIndices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('먼저 항목을 선택해주세요.')),
-      );
-      return;
-    }
-    final count = _selectedRowIndices.length;
-    final list = List<SharedExpenseTableItem>.from(_itemsForCurrentFilter());
-    final apiMode = _useGoodsPurchasesApi(context);
-    final goodsApi = _filterIndex == 0 && apiMode;
-    final utilityApi = _filterIndex == 1 && apiMode;
-
-    if (goodsApi) {
-      final ids = <int>[];
-      for (final i in _selectedRowIndices) {
-        if (i < 0 || i >= list.length) continue;
-        final id = list[i].purchaseId;
-        if (id == null || id <= 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('서버에 등록된 구매만 정산할 수 있어요.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
-        }
-        ids.add(id);
-      }
-      final agreed = await _confirmSettlementNotifyDialog();
-      if (agreed != true || !mounted) return;
-      try {
-        await _requestGoodsSettlement(purchaseIds: ids);
-        if (!mounted) return;
-        setState(() => _selectedRowIndices.clear());
-        await _loadGoodsPurchases();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('선택한 $count개 항목에 정산 요청을 보냈어요.'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } on ApiException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      }
-      return;
-    }
-
-    if (utilityApi) {
-      final billIds = <int>[];
-      for (final i in _selectedRowIndices) {
-        if (i < 0 || i >= list.length) continue;
-        final id = list[i].billId;
-        if (id == null || id <= 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('서버에 등록된 공과금만 정산 요청할 수 있어요.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
-        }
-        billIds.add(id);
-      }
-      final agreed = await _confirmSettlementNotifyDialog();
-      if (agreed != true || !mounted) return;
-      try {
-        final paymentIds = await _unsettledUtilityPaymentIdsForBillIds(billIds);
-        if (paymentIds.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                '정산할 미정산 납부 기록이 없어요. 표 기간이나 변동 공과금 금액을 확인해 주세요.',
-              ),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
-        }
-        await _requestUtilityBillSettlement(paymentIds: paymentIds);
-        if (!mounted) return;
-        setState(() => _selectedRowIndices.clear());
-        await _loadUtilityBills();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('선택한 $count개 공과금에 정산 요청을 보냈어요.'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } on ApiException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-      }
-      return;
-    }
-
-    setState(() {
-      for (final i in _selectedRowIndices) {
-        if (i >= 0 && i < list.length) {
-          list[i] = list[i].copyWith(manuallySettled: true);
-        }
-      }
-      if (_filterIndex == 0) {
-        _goodsExpenseItems = list;
-      } else {
-        _utilityExpenseItems = list;
-      }
-      _selectedRowIndices.clear();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('선택한 $count개 항목을 정산 요청 상태로 표시했어요.'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  Future<void> _cancelSettlementSelectedRows() async {
-    if (_selectedRowIndices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('먼저 항목을 선택해주세요.')),
-      );
-      return;
-    }
-    final count = _selectedRowIndices.length;
-    final list = List<SharedExpenseTableItem>.from(_itemsForCurrentFilter());
-    final goodsApi = _filterIndex == 0 && _useGoodsPurchasesApi(context);
-
-    if (goodsApi) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            '정산 요청·완료는 「공용 구매 물품 정산 요청」 플로우에서 처리해 주세요.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      for (final i in _selectedRowIndices) {
-        if (i >= 0 && i < list.length) {
-          list[i] = list[i].copyWith(manuallySettled: false);
-        }
-      }
-      if (_filterIndex == 0) {
-        _goodsExpenseItems = list;
-      } else {
-        _utilityExpenseItems = list;
-      }
-      _selectedRowIndices.clear();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('선택한 $count개 항목의 정산 완료 표시를 해제했어요.'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   /// AI 영수증 인식 — 카메라/앨범 → 이미지 분석 API → 품목 편집·등록
@@ -5663,7 +5574,7 @@ class _AiReceiptRecognitionFlowDialogState
             ),
           ),
           if (_analyzing) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             const Center(
               child: SizedBox(
                 width: 32,
@@ -5674,7 +5585,7 @@ class _AiReceiptRecognitionFlowDialogState
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 14),
             Text(
               '이미지를 분석하는 중…',
               textAlign: TextAlign.center,
@@ -5684,6 +5595,7 @@ class _AiReceiptRecognitionFlowDialogState
                 fontFamily: 'Pretendard Variable',
               ),
             ),
+            const SizedBox(height: 28),
           ],
           if (!_analyzing) const SizedBox(height: 28),
           PrimaryButton(

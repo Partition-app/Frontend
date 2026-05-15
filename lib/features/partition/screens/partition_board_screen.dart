@@ -2188,15 +2188,8 @@ class _ReservationItemManageDialogState
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
-      child: PartitionGlassDialog(
+      child: PartitionGlassDialog.modal(
         constraints: BoxConstraints(maxWidth: dialogW, minWidth: dialogW),
-        borderRadius: BorderRadius.circular(24),
-        blurSigma: 18,
-        borderColor: Colors.white.withOpacity(0.22),
-        gradient: const LinearGradient(
-          colors: [Colors.transparent, Colors.transparent],
-        ),
-        boxShadow: const [],
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 22),
         child: GestureDetector(
           onTap: () {},
@@ -2231,7 +2224,7 @@ class _ReservationItemManageDialogState
               Text(
                 isAdd
                     ? '예약할 물품을 새로 등록하세요.'
-                    : '등록된 물품 이름을 수정하세요.',
+                    : '수정할 물품을 선택한 뒤 이름을 바꿔 주세요.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.72),
@@ -2241,20 +2234,12 @@ class _ReservationItemManageDialogState
                 ),
               ),
               const SizedBox(height: 14),
-              FrostedPanel(
-                borderRadius: BorderRadius.circular(20),
-                backgroundOpacity: 0.1,
-                padding: const EdgeInsets.all(4),
-                child: SizedBox(
-                  height: 40,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildTab('추가', 0),
-                      _buildTab('수정', 1),
-                    ],
-                  ),
-                ),
+              Row(
+                children: [
+                  Expanded(child: _buildModePill('추가', 0)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _buildModePill('수정', 1)),
+                ],
               ),
               const SizedBox(height: 16),
               if (isAdd) ...[
@@ -2319,48 +2304,66 @@ class _ReservationItemManageDialogState
                     borderRadius: BorderRadius.circular(20),
                     backgroundOpacity: 0.1,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 0,
+                      horizontal: 4,
+                      vertical: 4,
                     ),
                     child: SizedBox(
-                      height: _kNameFieldHeight,
-                      child: DropdownButtonFormField<int>(
-                        value: _selectedEditItemId,
-                        isExpanded: true,
-                        isDense: true,
-                        alignment: AlignmentDirectional.centerStart,
-                        dropdownColor: const Color(0xFF3A3A3C),
-                        iconEnabledColor: Colors.white70,
-                        padding: const EdgeInsets.only(
-                          left: _kNameFieldInsetLeft,
-                          right: 8,
+                      height: 160,
+                      child: ListView.separated(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: _items.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: Colors.white.withOpacity(0.12),
                         ),
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
-                            vertical: (_kNameFieldHeight - 13) / 2,
-                          ),
-                        ),
-                        style: fieldStyle,
-                        items: _items
-                            .map(
-                              (e) => DropdownMenuItem<int>(
-                                value: e.itemId,
-                                child: Text(
-                                  e.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: fieldStyle,
+                        itemBuilder: (context, i) {
+                          final e = _items[i];
+                          final sel = _selectedEditItemId == e.itemId;
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _selectedEditItemId = e.itemId;
+                                  _syncEditFieldToSelection();
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      sel
+                                          ? Icons.radio_button_checked
+                                          : Icons.radio_button_off,
+                                      size: 20,
+                                      color: sel
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.45),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        e.name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: fieldStyle.copyWith(
+                                          fontWeight: sel
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            )
-                            .toList(),
-                        onChanged: (id) {
-                          if (id == null) return;
-                          setState(() {
-                            _selectedEditItemId = id;
-                            _syncEditFieldToSelection();
-                          });
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -2411,82 +2414,44 @@ class _ReservationItemManageDialogState
     );
   }
 
-  Widget _buildTab(String label, int index) {
+  Widget _buildModePill(String label, int index) {
     final selected = _modeIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          if (_modeIndex == index) return;
-          setState(() => _modeIndex = index);
-        },
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: _loading
+            ? null
+            : () {
+                if (_modeIndex == index) return;
+                setState(() => _modeIndex = index);
+              },
+        borderRadius: BorderRadius.circular(18),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeInOut,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: selected
-                ? Border.all(
-                    color: Colors.white.withOpacity(0.35),
-                    width: 0.5,
-                  )
-                : null,
-            gradient: selected
-                ? const RadialGradient(
-                    center: Alignment(-0.1212, -0.1178),
-                    radius: 1.6319,
-                    colors: [
-                      Color.fromRGBO(255, 255, 255, 0.15),
-                      Color.fromRGBO(255, 255, 255, 0.38),
-                    ],
-                    stops: [0.0, 1.0],
-                  )
-                : null,
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.22),
-                      blurRadius: 20,
-                      spreadRadius: 0,
-                      offset: const Offset(2.5, 2.5),
-                    ),
-                  ]
-                : null,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withOpacity(0.78)
+                  : Colors.white.withOpacity(0.22),
+              width: selected ? 1.1 : 0.5,
+            ),
+            color: selected
+                ? Colors.white.withOpacity(0.24)
+                : Colors.white.withOpacity(0.04),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: selected
-                ? BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                    child: Container(
-                      alignment: Alignment.center,
-                      color: Colors.white.withOpacity(0.04),
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          height: 1.0,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'Pretendard Variable',
-                        ),
-                      ),
-                    ),
-                  )
-                : Center(
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 13,
-                        height: 1.0,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'Pretendard Variable',
-                      ),
-                    ),
-                  ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(selected ? 1 : 0.55),
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Pretendard Variable',
+              fontSize: 14,
+            ),
           ),
         ),
       ),

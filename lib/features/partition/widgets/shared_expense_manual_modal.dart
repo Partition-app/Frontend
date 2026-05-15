@@ -11,6 +11,7 @@ import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart'
 import 'package:partition_app/features/partition/utils/supply_purchase_input.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_date_picker.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_widget.dart';
+import 'package:partition_app/features/partition/widgets/utility_pay_day_glass_picker.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 
@@ -1571,32 +1572,39 @@ class _SharedExpenseManualModalState extends State<SharedExpenseManualModal> {
 
   Widget _buildUtilityPayDayGlassDropdown() {
     final busy = _submittingPurchase || _submittingUtilityBill;
+    final day = _utilityPayDay.clamp(1, 31);
     return _utilityBillGlassBlurShell(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _utilityPayDay.clamp(1, 31),
-          isExpanded: true,
-          dropdownColor: const Color(0xE6282835),
-          iconEnabledColor: Colors.white70,
-          style: _inputStyle,
-          items: List.generate(
-            31,
-            (i) => DropdownMenuItem(
-              value: i + 1,
-              child: Text(
-                '매월 ${i + 1}일',
-                style: _inputStyle,
-              ),
-            ),
-          ),
-          onChanged: busy
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: busy
               ? null
-              : (v) {
-                  if (v != null) {
-                    setState(() => _utilityPayDay = v);
+              : () async {
+                  final picked = await showGlassUtilityPayDayPicker(
+                    context,
+                    currentDay: day,
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _utilityPayDay = picked);
                   }
                 },
+          borderRadius: BorderRadius.circular(14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '매월 $day일',
+                  style: _inputStyle,
+                ),
+              ),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.white.withOpacity(busy ? 0.35 : 0.85),
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
     );

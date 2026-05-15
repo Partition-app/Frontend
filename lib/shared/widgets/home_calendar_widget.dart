@@ -23,15 +23,77 @@ const _kOtherMemberNames = ['홍길동', '김민수', '이영희', '박서준'];
 class HomeCalendarWidget extends StatefulWidget {
   final ValueChanged<DateTime>? onDateSelected;
   final GlobalKey<HomeCalendarWidgetState>? refreshKey; // 외부에서 갱신하기 위한 키
-  
+
+  /// [FrostedPanel] 기본 패딩과 동일
+  static const double frostHorizontalPadding = 56;
+  static const double frostVerticalPadding = 48;
+  static const double maxContentWidth = 440;
+  static const int gridWeekRows = 6;
+  static const int gridColumns = 7;
+  static const double gridSpacing = 8;
+  /// 월 선택 + 요일 헤더 + 간격
+  static const double monthHeaderHeight = 94;
+  static const double minCellSize = 34;
+  static const double maxCellSize = 52;
+
   const HomeCalendarWidget({
     super.key,
     this.onDateSelected,
     this.refreshKey,
   });
 
+  /// 태블릿 등 넓은 화면에서 캘린더 가로 폭 상한.
+  static double resolveContentWidth(double layoutWidth) {
+    if (!layoutWidth.isFinite || layoutWidth <= 0) return maxContentWidth;
+    return math.min(layoutWidth, maxContentWidth);
+  }
+
+  /// 월간 뷰(6주)가 잘리지 않도록 바깥 [SizedBox] 높이를 계산합니다.
+  static double resolveMonthViewHeight({
+    required double outerWidth,
+    double? outerHeight,
+  }) {
+    final layout = _computeMonthGridLayout(outerWidth, maxHeight: outerHeight);
+    return layout.gridHeight + monthHeaderHeight + frostVerticalPadding;
+  }
+
+  static _MonthGridLayout _computeMonthGridLayout(
+    double maxWidth, {
+    double? maxHeight,
+  }) {
+    final innerWidth = math.max(
+      0.0,
+      maxWidth - frostHorizontalPadding,
+    );
+    final cellFromWidth =
+        (innerWidth - (gridColumns - 1) * gridSpacing) / gridColumns;
+
+    var cell = cellFromWidth;
+    if (maxHeight != null && maxHeight.isFinite && maxHeight > 0) {
+      final innerHeight = maxHeight - frostVerticalPadding;
+      final gridBudget = innerHeight - monthHeaderHeight;
+      if (gridBudget > 0) {
+        final cellFromHeight =
+            (gridBudget - (gridWeekRows - 1) * gridSpacing) / gridWeekRows;
+        cell = math.min(cell, cellFromHeight);
+      }
+    }
+
+    cell = cell.clamp(minCellSize, maxCellSize);
+    final gridHeight =
+        gridWeekRows * cell + (gridWeekRows - 1) * gridSpacing;
+    return _MonthGridLayout(cellSize: cell, gridHeight: gridHeight);
+  }
+
   @override
   State<HomeCalendarWidget> createState() => HomeCalendarWidgetState();
+}
+
+class _MonthGridLayout {
+  const _MonthGridLayout({required this.cellSize, required this.gridHeight});
+
+  final double cellSize;
+  final double gridHeight;
 }
 
 /// HomeCalendarWidget의 State를 public으로 노출 (외부에서 refreshCalendar 호출 가능)
@@ -902,10 +964,11 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           final cat = _normalizeDailyCategory(event.category);
           final isSchedule = cat == 'SCHEDULE';
           final canEdit = isSchedule && (event.isOwner == true);
-          // 집안일: 서버 PK가 있으면 완료 토글 UI 제공 (권한은 API가 검증)
+          // 집안일: 본인 담당(`isOwner`)일 때만 완료 체크 UI — 타인 항목은 체크박스 미표시
           final isChoreItem =
               event.type == CalendarEventType.chore && cat == 'CHORE' && event.id != null;
-          
+          final canToggleChore = isChoreItem && event.isOwner == true;
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _EventChip(
@@ -917,11 +980,11 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
               onEdit: event.id != null && canEdit
                   ? () => _handleEditSchedule(event.id!, event.description, date)
                   : null,
-              onChoreCompleted: isChoreItem
+              onChoreCompleted: canToggleChore
                   ? (completed) =>
                       _handleToggleChoreCompletion(event.id!, completed, date)
                   : null,
-              choreCheckboxBusy: isChoreItem &&
+              choreCheckboxBusy: canToggleChore &&
                   _choreToggleInProgress.contains(event.id!),
             ),
           );
@@ -1628,7 +1691,6 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
                 days: days,
                 startMonth: startMonth,
                 currentMonthIndex: currentMonthIndex,
-                useExpandedGrid: hasBoundedHeight,
                 maxHeight: hasBoundedHeight ? constraints.maxHeight : null,
               );
 
@@ -1650,25 +1712,28 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     required List<DateTime> days,
     required int startMonth,
     required int currentMonthIndex,
-    required bool useExpandedGrid,
     double? maxHeight,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 그리드 높이 계산 (고정 높이 사용)
-        final gridHeight = 6 * ((constraints.maxWidth - 6 * 8) / 7 / 1.0); // 6주, childAspectRatio 1.0 기준
-        
+        final layout = HomeCalendarWidget._computeMonthGridLayout(
+          constraints.maxWidth,
+          maxHeight: maxHeight,
+        );
+        final gridHeight = layout.gridHeight;
+
         final gridView = GridView.builder(
           padding: EdgeInsets.zero,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
+            crossAxisCount: HomeCalendarWidget.gridColumns,
+            mainAxisSpacing: HomeCalendarWidget.gridSpacing,
+            crossAxisSpacing: HomeCalendarWidget.gridSpacing,
             childAspectRatio: 1.0,
           ),
-          itemCount: 42, // 6주
+          itemCount: HomeCalendarWidget.gridWeekRows *
+              HomeCalendarWidget.gridColumns,
           itemBuilder: (context, index) {
             final date = days[index];
             final isCurrentMonth = date.month == _currentMonth.month;
@@ -1782,10 +1847,6 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
               height: gridHeight,
               child: gridView,
             ),
-            // 월간 뷰에서는 이벤트 목록을 표시하지 않음 (더블클릭 시 주간 뷰에서만 표시)
-            if (useExpandedGrid && constraints.hasBoundedHeight)
-              // 공간을 채우기 위한 Spacer
-              const Spacer(),
           ],
         );
       },
@@ -1863,6 +1924,8 @@ class _EventChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color dotColor = _eventColor(event.type);
     final showChoreCheckbox = onChoreCompleted != null;
+    final showChoreCompletedStrike =
+        event.type == CalendarEventType.chore && (event.isCompleted ?? false);
     return ClipRRect(
       borderRadius: BorderRadius.circular(31.369),
       child: BackdropFilter(
@@ -1924,7 +1987,7 @@ class _EventChip extends StatelessWidget {
                     fontFamily: 'Pretendard Variable',
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
-                    decoration: (event.isCompleted ?? false) && showChoreCheckbox
+                    decoration: showChoreCompletedStrike
                         ? TextDecoration.lineThrough
                         : TextDecoration.none,
                     decorationColor: Colors.white70,
