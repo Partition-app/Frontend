@@ -11,9 +11,12 @@ import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
+import 'package:partition_app/shared/widgets/schedule_edit_modal.dart';
 import 'package:partition_app/shared/utils/partition_dummy_data_policy.dart';
 import 'package:partition_app/features/partition/theme/home_share_style.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
+import 'package:partition_app/shared/widgets/chore_assignment_common.dart';
+import 'package:partition_app/shared/widgets/chore_edit_dialog.dart';
 
 const _kChoreTaskNames = ['설거지', '빨래', '청소', '분리수거'];
 const _kOtherMemberNames = ['홍길동', '김민수', '이영희', '박서준'];
@@ -114,6 +117,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
   String? _cachedDailyDateKey;
   bool _isLoadingDaily = false;
   final ChoreService _choreService = ChoreService();
+  final AuthService _authService = AuthService();
   final Set<int> _choreToggleInProgress = {};
   /// 집안일 더미/월간 집계용 담당자 표시명(로그인·로컬 이름)
   String _meNameForChores = '나';
@@ -211,11 +215,14 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
       }
 
       return _CalendarEvent(
-        eventType, 
+        eventType,
         description,
         id: item.id,
         category: item.category,
         assigneeName: item.assigneeName,
+        assigneeId: item.assigneeId,
+        choreType: item.choreType,
+        choreTitle: cat == 'CHORE' ? item.title : null,
         isOwner: isOwnerForEvent,
         isCompleted: item.isCompleted,
       );
@@ -552,6 +559,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
             _cachedDailyEvents![dateKey] = response.result!;
             _cachedDailyDateKey = dateKey;
           });
+          await _enrichChoresWithDailyApi(dateKey);
         }
       } else {
         // 실패 시 빈 배열을 넣지 않음 — 디버그·미로그인일 때만 월간 합성으로 폴백
@@ -964,22 +972,27 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           final cat = _normalizeDailyCategory(event.category);
           final isSchedule = cat == 'SCHEDULE';
           final canEdit = isSchedule && (event.isOwner == true);
-          // 집안일: 본인 담당(`isOwner`)일 때만 완료 체크 UI — 타인 항목은 체크박스 미표시
+          // 집안일: 완료 체크는 본인 담당만, 수정·삭제는 그룹 집안일 전체
           final isChoreItem =
               event.type == CalendarEventType.chore && cat == 'CHORE' && event.id != null;
           final canToggleChore = isChoreItem && event.isOwner == true;
+          final canManageChore =
+              isChoreItem && event.id != null && event.id! > 0;
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _EventChip(
               event: event,
-              // isOwner가 true인 경우에만 수정/삭제 가능
               onDelete: event.id != null && canEdit
                   ? () => _handleDeleteSchedule(event.id!, date)
-                  : null,
+                  : canManageChore
+                      ? () => _handleDeleteChore(event.id!, date)
+                      : null,
               onEdit: event.id != null && canEdit
                   ? () => _handleEditSchedule(event.id!, event.description, date)
-                  : null,
+                  : canManageChore
+                      ? () => _handleEditChore(event, date)
+                      : null,
               onChoreCompleted: canToggleChore
                   ? (completed) =>
                       _handleToggleChoreCompletion(event.id!, completed, date)
@@ -1128,6 +1141,290 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     }
   }
 
+  /// `/chores/daily`로 담당자·유형 메타 보강 (일간 캘린더에 없을 때)
+  Future<void> _enrichChoresWithDailyApi(String dateKey) async {
+    try {
+      final response = await _choreService.fetchDailyChores(date: dateKey);
+      if (!response.isSuccess || response.result == null) return;
+
+      final items = _cachedDailyEvents?[dateKey];
+      if (items == null || items.isEmpty) return;
+
+      final byChoreId = {
+        for (final c in response.result!) c.choreId: c,
+      };
+
+      var changed = false;
+      final merged = items.map((item) {
+        if (_normalizeDailyCategory(item.category) != 'CHORE') return item;
+        final detail = byChoreId[item.id];
+        if (detail == null) return item;
+        changed = true;
+        return DailyCalendarItem(
+          category: item.category,
+          id: item.id,
+          title: detail.choreName.isNotEmpty ? detail.choreName : item.title,
+          assigneeName: detail.assigneeName,
+          assigneeId: detail.assigneeId,
+          choreType: detail.choreType,
+          isCompleted: detail.isCompleted,
+          isOwner: item.isOwner,
+        );
+      }).toList();
+
+      if (!changed || !mounted) return;
+      setState(() {
+        _cachedDailyEvents![dateKey] = merged;
+      });
+    } catch (_) {
+      // 전용 API 미구현 시 일간 캘린더 데이터만 사용
+    }
+  }
+
+  String _choreTitleFromEvent(_CalendarEvent event) {
+    if (event.choreTitle != null && event.choreTitle!.trim().isNotEmpty) {
+      return event.choreTitle!.trim();
+    }
+    final desc = event.description;
+    if (desc.contains(' · ')) {
+      return desc.split(' · ').skip(1).join(' · ').trim();
+    }
+    return desc;
+  }
+
+  Future<int?> _resolveChoreAssigneeId(_CalendarEvent event) async {
+    if (event.assigneeId != null && event.assigneeId! > 0) {
+      return event.assigneeId;
+    }
+    final members = await _authService.fetchHouseholdMembers();
+    final name = event.assigneeName?.trim();
+    if (name != null && name.isNotEmpty) {
+      for (final m in members) {
+        if (m.name == name) return m.userId;
+      }
+    }
+    final descName = event.description.split(' · ').first.trim();
+    for (final m in members) {
+      if (m.name == descName) return m.userId;
+    }
+    return null;
+  }
+
+  Future<void> _handleDeleteChore(int choreId, DateTime date) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        alignment: Alignment.center,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white, width: 0.5),
+            gradient: const RadialGradient(
+              center: Alignment(-0.1212, -0.1178),
+              radius: 1.6319,
+              colors: [
+                Color.fromRGBO(255, 255, 255, 0.10),
+                Color.fromRGBO(255, 255, 255, 0.15),
+              ],
+              stops: [0.0, 1.0],
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '집안일 삭제',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '정말 이 집안일을 삭제하시겠습니까?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.normal,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildGlassmorphismButton(
+                        text: '취소',
+                        onTap: () => Navigator.of(context).pop(false),
+                        width: 100,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildGlassmorphismButton(
+                        text: '삭제',
+                        onTap: () => Navigator.of(context).pop(true),
+                        width: 100,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final response = await _choreService.deleteChore(choreId: choreId);
+      if (!mounted) return;
+      if (!response.isSuccess) {
+        throw Exception(response.message);
+      }
+
+      final dateKey = _dateKey(date);
+      _cachedDailyEvents?.remove(dateKey);
+      await _loadDailyCalendarData(date, forceRefresh: true);
+      refreshCalendar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            response.message.isNotEmpty
+                ? response.message
+                : '집안일이 삭제되었어요.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : '집안일 삭제에 실패했어요.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleEditChore(_CalendarEvent event, DateTime date) async {
+    if (event.id == null || event.id! <= 0) return;
+    if (event.isCompleted == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('이미 완료된 집안일은 수정할 수 없어요.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final assigneeId = await _resolveChoreAssigneeId(event);
+    if (assigneeId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('담당자 정보를 확인할 수 없어요.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final members = await _authService.fetchHouseholdMembers();
+    if (!mounted) return;
+
+    final today = choreDateOnly(DateTime.now());
+    final lastDate = today.add(const Duration(days: 14));
+
+    final result = await showChoreEditDialog(
+      context: context,
+      choreTitle: _choreTitleFromEvent(event),
+      members: members,
+      initialAssigneeId: assigneeId,
+      initialDate: date,
+      firstDate: today,
+      lastDate: lastDate,
+    );
+
+    if (result == null) return;
+
+    final newAssigneeId = result['assigneeId'] as int;
+    final newDate = choreDateOnly(result['date'] as DateTime);
+    final oldDateKey = _dateKey(date);
+    final newDateKey = formatChoreDateForApi(newDate);
+    final oldAssigneeId = assigneeId;
+
+    final body = <String, dynamic>{};
+    if (newAssigneeId != oldAssigneeId) {
+      body['assigneeId'] = newAssigneeId;
+    }
+    if (newDateKey != oldDateKey) {
+      body['date'] = newDateKey;
+    }
+    if (body.isEmpty) return;
+
+    try {
+      final response = await _choreService.updateChoreAssignment(
+        choreId: event.id!,
+        assigneeId: body['assigneeId'] as int?,
+        date: body['date'] as String?,
+      );
+
+      if (!mounted) return;
+      if (!response.isSuccess) {
+        throw Exception(response.message);
+      }
+
+      _cachedDailyEvents?.remove(oldDateKey);
+      if (oldDateKey != newDateKey) {
+        _cachedDailyEvents?.remove(newDateKey);
+      }
+      await _loadDailyCalendarData(date, forceRefresh: true);
+      if (oldDateKey != newDateKey) {
+        await _loadDailyCalendarData(newDate, forceRefresh: true);
+      }
+      refreshCalendar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            response.message.isNotEmpty
+                ? response.message
+                : '집안일이 수정되었어요.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : '집안일 수정에 실패했어요.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleDeleteSchedule(int scheduleId, DateTime date) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1254,270 +1551,42 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     }
   }
 
-  Future<void> _handleEditSchedule(int scheduleId, String currentContent, DateTime date) async {
-    // 작성자 이름 제거 (형식: "작성자이름 · 제목" 또는 "제목")
-    String titleOnly = currentContent;
+  Future<void> _handleEditSchedule(
+    int scheduleId,
+    String currentContent,
+    DateTime date,
+  ) async {
+    var titleOnly = currentContent;
     if (currentContent.contains(' · ')) {
       final parts = currentContent.split(' · ');
       if (parts.length > 1) {
         titleOnly = parts.sublist(1).join(' · ');
       }
     }
-    // 완료 표시 제거
     titleOnly = titleOnly.replaceAll(' ✓', '').trim();
-    
-    final TextEditingController controller = TextEditingController(text: titleOnly);
-    DateTime selectedDate = date;
-    
-    final result = await showDialog<Map<String, dynamic>>(
+
+    await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              alignment: Alignment.center,
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white,
-                    width: 0.5,
-                  ),
-                  gradient: const RadialGradient(
-                    center: Alignment(-0.1212, -0.1178),
-                    radius: 1.6319,
-                    colors: [
-                      Color.fromRGBO(255, 255, 255, 0.10),
-                      Color.fromRGBO(255, 255, 255, 0.15),
-                    ],
-                    stops: [0.0, 1.0],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.25),
-                      blurRadius: 20,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          '일정 수정',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            fontFamily: 'Pretendard Variable',
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        // 입력 필드
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                              width: 0.5,
-                            ),
-                            gradient: const RadialGradient(
-                              center: Alignment(-0.1212, -0.1178),
-                              radius: 1.6319,
-                              colors: [
-                                Color.fromRGBO(255, 255, 255, 0.10),
-                                Color.fromRGBO(255, 255, 255, 0.15),
-                              ],
-                              stops: [0.0, 1.0],
-                            ),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                              child: TextField(
-                                controller: controller,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontFamily: 'Pretendard Variable',
-                                ),
-                                decoration: const InputDecoration(
-                                  border: InputBorder.none,
-                                  hintText: '일정을 입력해주세요...',
-                                  hintStyle: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                    fontFamily: 'Pretendard Variable',
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // 날짜 선택 버튼
-                        GestureDetector(
-                          onTap: () async {
-                            final DateTime? picked = await showDialog<DateTime>(
-                              context: context,
-                              barrierColor: Colors.black.withOpacity(0.5),
-                              builder: (context) => _GlassmorphicDatePicker(
-                                initialDate: selectedDate,
-                                firstDate: DateTime(2020, 1, 1), // 충분히 과거
-                                lastDate: DateTime(2100, 12, 31), // 충분히 미래
-                              ),
-                            );
-                            if (picked != null) {
-                              setDialogState(() {
-                                selectedDate = picked;
-                              });
-                            }
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
-                                width: 0.5,
-                              ),
-                              gradient: const RadialGradient(
-                                center: Alignment(-0.1212, -0.1178),
-                                radius: 1.6319,
-                                colors: [
-                                  Color.fromRGBO(255, 255, 255, 0.10),
-                                  Color.fromRGBO(255, 255, 255, 0.15),
-                                ],
-                                stops: [0.0, 1.0],
-                              ),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      '날짜 변경: ${_formatDate(selectedDate)}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontFamily: 'Pretendard Variable',
-                                      ),
-                                    ),
-                                    const Icon(
-                                      Icons.calendar_today,
-                                      color: Colors.white70,
-                                      size: 16,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildGlassmorphismButton(
-                              text: '취소',
-                              onTap: () => Navigator.of(context).pop(),
-                              width: 100,
-                            ),
-                            const SizedBox(width: 12),
-                            _buildGlassmorphismButton(
-                              text: '저장',
-                              onTap: () {
-                                Navigator.of(context).pop({
-                                  'content': controller.text.trim(),
-                                  'date': selectedDate,
-                                });
-                              },
-                              width: 100,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (result == null) return;
-
-    final newContent = result['content'] as String;
-    final newDate = result['date'] as DateTime;
-
-    if (newContent.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('일정 내용을 입력해주세요.')),
-      );
-      return;
-    }
-
-    try {
-      final dateString = '${newDate.year}-${newDate.month.toString().padLeft(2, '0')}-${newDate.day.toString().padLeft(2, '0')}';
-      await _calendarService.updateSchedule(
+      builder: (context) => ScheduleEditModal(
         scheduleId: scheduleId,
-        content: newContent,
-        date: dateString,
-      );
-
-      if (!mounted) return;
-
-      // 캐시 무효화 및 재로드
-      final dateKey = _dateKey(date);
-      _cachedDailyEvents?.remove(dateKey);
-      // 날짜가 변경된 경우 새로운 날짜도 캐시 무효화
-      if (dateKey != _dateKey(newDate)) {
-        _cachedDailyEvents?.remove(_dateKey(newDate));
-      }
-      await _loadDailyCalendarData(date);
-      if (dateKey != _dateKey(newDate)) {
-        await _loadDailyCalendarData(newDate);
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('일정이 수정되었습니다.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('일정 수정에 실패했습니다: ${e is ApiException ? e.message : '알 수 없는 오류'}'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+        initialContent: titleOnly,
+        initialDate: date,
+        onSuccess: (originalDate, updatedDate) async {
+          final originalKey = _dateKey(originalDate);
+          final updatedKey = _dateKey(updatedDate);
+          _cachedDailyEvents?.remove(originalKey);
+          if (originalKey != updatedKey) {
+            _cachedDailyEvents?.remove(updatedKey);
+          }
+          await _loadDailyCalendarData(originalDate, forceRefresh: true);
+          if (originalKey != updatedKey) {
+            await _loadDailyCalendarData(updatedDate, forceRefresh: true);
+          }
+          refreshCalendar();
+        },
+      ),
+    );
   }
 
   Widget _buildGlassmorphismButton({
@@ -2074,15 +2143,21 @@ class _CalendarEvent {
   final int? id;
   final String? category;
   final String? assigneeName;
+  final int? assigneeId;
+  final String? choreType;
+  final String? choreTitle;
   final bool? isOwner;
   final bool? isCompleted;
 
   const _CalendarEvent(
-    this.type, 
+    this.type,
     this.description, {
     this.id,
     this.category,
     this.assigneeName,
+    this.assigneeId,
+    this.choreType,
+    this.choreTitle,
     this.isOwner,
     this.isCompleted,
   });

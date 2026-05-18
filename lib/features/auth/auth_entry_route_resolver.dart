@@ -19,7 +19,11 @@ class AuthEntryRouteResolver {
 
     if (inGroup) {
       await StorageService.setHouseholdId(householdId.toString());
-      final serverRole = household.result!.role?.trim().toUpperCase();
+      final result = household.result!;
+      final serverRole = result.role?.trim().toUpperCase() ??
+          (result.isLeader == true
+              ? 'LEADER'
+              : (result.isLeader == false ? 'MEMBER' : null));
       if (serverRole == 'LEADER' || serverRole == 'MEMBER') {
         await StorageService.setUserRole(serverRole!);
       } else {

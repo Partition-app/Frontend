@@ -266,7 +266,7 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
     required Map<String, dynamic> data,
   }) {
     final isBillAmount = noticeType ==
-            AlarmNoticeType.billAmountInputRequired ||
+            AlarmNoticeType.billPaymentReminder ||
         AlarmNoticeType.messageLooksLikeUtilityBillAmountInput(message);
     if (!isBillAmount) return false;
 

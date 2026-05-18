@@ -34,6 +34,11 @@ HouseholdResult _$HouseholdResultFromJson(Map<String, dynamic> json) =>
       name: json['name'] as String?,
       id: (json['id'] as num?)?.toInt(),
       role: json['role'] as String?,
+      isLeader: json['isLeader'] as bool?,
+      members: (json['members'] as List<dynamic>?)
+          ?.map((e) =>
+              HouseholdMemberModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
 
 Map<String, dynamic> _$HouseholdResultToJson(HouseholdResult instance) =>
@@ -42,4 +47,6 @@ Map<String, dynamic> _$HouseholdResultToJson(HouseholdResult instance) =>
       'name': instance.name,
       'id': instance.id,
       'role': instance.role,
+      'isLeader': instance.isLeader,
+      'members': instance.members,
     };

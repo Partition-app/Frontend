@@ -10,14 +10,30 @@ import 'package:provider/provider.dart';
 import 'package:partition_app/features/partition/providers/home_share_provider.dart';
 import 'package:partition_app/features/partition/theme/home_share_style.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
+import 'package:partition_app/core/storage/storage_service.dart';
+import 'package:partition_app/features/auth/models/household_response_model.dart';
+import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/features/partition/services/geocoding_service.dart';
 import 'package:partition_app/shared/widgets/home_calendar_widget.dart';
 import 'package:partition_app/shared/widgets/primary_button.dart';
 import 'package:partition_app/shared/widgets/chore_assignment_modal.dart';
+import 'package:partition_app/shared/widgets/chore_manual_assignment_modal.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/schedule_registration_modal.dart';
 import 'package:partition_app/shared/widgets/partition_home_settings_modal.dart';
 import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
+
+/// [HouseholdResult]의 `role` / `isLeader`와 로컬에 캐시된 역할로 방장 여부를 판별합니다.
+bool _isUserHouseholdLeader({HouseholdResult? result}) {
+  final r = result?.role?.trim().toUpperCase();
+  if (r == 'LEADER') return true;
+  if (result?.isLeader == true) return true;
+  if (r == 'MEMBER' || result?.isLeader == false) return false;
+  final cached = StorageService.getUserRole()?.toUpperCase();
+  if (cached == 'LEADER') return true;
+  if (cached == 'MEMBER') return false;
+  return false;
+}
 
 /// 귀가 공유 API(동의·집 위치·알림 전송) 실패 시 서버 메시지를 스낵바로 한 번 표시합니다.
 void _showHomeShareServerNoticeIfAny(BuildContext context) {
@@ -48,6 +64,10 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
   static const double _scrollBottomInsetForTabBar = 147.0;
   static const double _scrollExtraTailSpace = 56.0;
 
+  final AuthService _authService = AuthService();
+  bool _isHouseholdLeader =
+      StorageService.getUserRole()?.toUpperCase() == 'LEADER';
+
   DateTime _selectedDate = DateTime.now();
   final GlobalKey<HomeCalendarWidgetState> _calendarKey =
       GlobalKey<HomeCalendarWidgetState>();
@@ -58,6 +78,21 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(context.read<HomeShareProvider>().initialize());
+      unawaited(_refreshHouseholdLeader());
+    });
+  }
+
+  /// `GET /households/me`로 방장 여부를 갱신합니다 (설정 모달과 동일하게 역할을 로컬에 저장).
+  Future<void> _refreshHouseholdLeader() async {
+    final res = await _authService.fetchMyHousehold();
+    if (!mounted) return;
+    final role = res?.result?.role?.trim();
+    if (role != null && role.isNotEmpty) {
+      await StorageService.setUserRole(role);
+    }
+    if (!mounted) return;
+    setState(() {
+      _isHouseholdLeader = _isUserHouseholdLeader(result: res?.result);
     });
   }
 
@@ -86,6 +121,7 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     _calendarKey.currentState?.refreshCalendar();
     if (mounted) {
       await context.read<HomeShareProvider>().initialize();
+      await _refreshHouseholdLeader();
     }
   }
 
@@ -110,6 +146,16 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     );
   }
 
+  void _showChoreManualAssignmentModal(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) => ChoreManualAssignmentModal(
+        onSuccess: _refreshCalendar,
+      ),
+    );
+  }
+
   void _showSettingsModal(BuildContext context) {
     showDialog(
       context: context,
@@ -122,6 +168,17 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
   // ── 집 위치 변경 ──────────────────────────────────────────────────────────
 
   Future<void> _onEditHomeLocation(BuildContext context) async {
+    await _refreshHouseholdLeader();
+    if (!context.mounted) return;
+    if (!_isHouseholdLeader) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('집 위치는 그룹 방장만 변경할 수 있어요.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
@@ -147,7 +204,12 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
       await provider.ensureHomeLocationFromServer();
     }
     if (provider.homeLocation == null) {
-      final bool set = await _showHomeSetupDialog(context);
+      await _refreshHouseholdLeader();
+      if (!context.mounted) return;
+      final bool set = await _showHomeSetupDialog(
+        context,
+        canChangeHouseholdHomeLocation: _isHouseholdLeader,
+      );
       if (!set) return;
       if (context.mounted) {
         _showHomeShareServerNoticeIfAny(context);
@@ -163,11 +225,16 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
     }
   }
 
-  Future<bool> _showHomeSetupDialog(BuildContext context) async {
+  Future<bool> _showHomeSetupDialog(
+    BuildContext context, {
+    required bool canChangeHouseholdHomeLocation,
+  }) async {
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.5),
-      builder: (ctx) => const _HomeLocationSetupDialog(),
+      builder: (ctx) => _HomeLocationSetupDialog(
+        canChangeHouseholdHomeLocation: canChangeHouseholdHomeLocation,
+      ),
     );
     return result ?? false;
   }
@@ -349,9 +416,15 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
             ),
             const SizedBox(height: 10),
             PrimaryButton(
-              label: '집안일 자동 배정',
+              label: 'AI 집안일 배정',
               width: buttonWidth,
               onPressed: () => _showChoreAssignmentModal(context),
+            ),
+            const SizedBox(height: 10),
+            PrimaryButton(
+              label: '집안일 직접 배정',
+              width: buttonWidth,
+              onPressed: () => _showChoreManualAssignmentModal(context),
             ),
             const SizedBox(height: 10),
             PrimaryButton(
@@ -364,6 +437,7 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
               child: _HomeShareCard(
                 onToggle: () => _onToggleSharing(context),
                 onEditLocation: () => _onEditHomeLocation(context),
+                canEditHomeLocation: _isHouseholdLeader,
               ),
             ),
             const SizedBox(height: 20),
@@ -422,12 +496,14 @@ class _HomeShareUiState {
     required this.nearHome,
     required this.loading,
     required this.hasHome,
+    required this.canEditHomeLocation,
   });
 
   final bool enabled;
   final bool nearHome;
   final bool loading;
   final bool hasHome;
+  final bool canEditHomeLocation;
 
   @override
   bool operator ==(Object other) =>
@@ -435,20 +511,24 @@ class _HomeShareUiState {
       enabled == other.enabled &&
       nearHome == other.nearHome &&
       loading == other.loading &&
-      hasHome == other.hasHome;
+      hasHome == other.hasHome &&
+      canEditHomeLocation == other.canEditHomeLocation;
 
   @override
-  int get hashCode => Object.hash(enabled, nearHome, loading, hasHome);
+  int get hashCode =>
+      Object.hash(enabled, nearHome, loading, hasHome, canEditHomeLocation);
 }
 
 class _HomeShareCard extends StatelessWidget {
   const _HomeShareCard({
     required this.onToggle,
     required this.onEditLocation,
+    required this.canEditHomeLocation,
   });
 
   final VoidCallback onToggle;
   final VoidCallback onEditLocation;
+  final bool canEditHomeLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -458,12 +538,14 @@ class _HomeShareCard extends StatelessWidget {
         nearHome: provider.isNearHome,
         loading: provider.isLoading,
         hasHome: provider.homeLocation != null,
+        canEditHomeLocation: canEditHomeLocation,
       ),
       builder: (context, state, _) => _HomeShareCardBody(
         enabled: state.enabled,
         nearHome: state.nearHome,
         loading: state.loading,
         hasHome: state.hasHome,
+        canEditHomeLocation: state.canEditHomeLocation,
         onToggle: onToggle,
         onEditLocation: onEditLocation,
       ),
@@ -477,6 +559,7 @@ class _HomeShareCardBody extends StatelessWidget {
     required this.nearHome,
     required this.loading,
     required this.hasHome,
+    required this.canEditHomeLocation,
     required this.onToggle,
     required this.onEditLocation,
   });
@@ -485,6 +568,7 @@ class _HomeShareCardBody extends StatelessWidget {
   final bool nearHome;
   final bool loading;
   final bool hasHome;
+  final bool canEditHomeLocation;
   final VoidCallback onToggle;
   final VoidCallback onEditLocation;
 
@@ -584,27 +668,44 @@ class _HomeShareCardBody extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // 집 위치 변경 버튼
+                  // 집 위치 변경 버튼 (방장만 서버 좌표 변경 가능)
                   GestureDetector(
-                    onTap: onEditLocation,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.07),
-                        borderRadius:
-                            BorderRadius.circular(PartitionUiTokens.fieldRadius),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.16),
+                    onTap: () {
+                      if (!canEditHomeLocation) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('집 위치는 그룹 방장만 변경할 수 있어요.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+                      onEditLocation();
+                    },
+                    child: Opacity(
+                      opacity: canEditHomeLocation ? 1.0 : 0.45,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.07),
+                          borderRadius: BorderRadius.circular(
+                            PartitionUiTokens.fieldRadius,
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.16),
+                          ),
                         ),
-                      ),
-                      child: Icon(
-                        Icons.edit_location_alt_rounded,
-                        size: 16,
-                        color: enabled
-                            ? HomeShareStyle.point.withOpacity(0.82)
-                            : Colors.white.withOpacity(0.5),
+                        child: Icon(
+                          Icons.edit_location_alt_rounded,
+                          size: 16,
+                          color: canEditHomeLocation
+                              ? (enabled
+                                  ? HomeShareStyle.point.withOpacity(0.82)
+                                  : Colors.white.withOpacity(0.5))
+                              : Colors.white.withOpacity(0.35),
+                        ),
                       ),
                     ),
                   ),
@@ -731,7 +832,12 @@ enum _HomeSetupStage {
 }
 
 class _HomeLocationSetupDialog extends StatefulWidget {
-  const _HomeLocationSetupDialog();
+  const _HomeLocationSetupDialog({
+    required this.canChangeHouseholdHomeLocation,
+  });
+
+  /// 서버 가구 좌표를 새로 저장하거나 바꿀 수 있는지 (그룹 방장만 true).
+  final bool canChangeHouseholdHomeLocation;
 
   @override
   State<_HomeLocationSetupDialog> createState() =>
@@ -948,26 +1054,30 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: TextButton(
-                      onPressed: _busy ? null : _goToChooseNewHome,
-                      child: Text(
-                        '지금 위치로 새로 설정',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.72),
-                          fontFamily: 'Pretendard Variable',
-                          fontWeight: FontWeight.w500,
+                  if (widget.canChangeHouseholdHomeLocation)
+                    Expanded(
+                      child: TextButton(
+                        onPressed: _busy ? null : _goToChooseNewHome,
+                        child: Text(
+                          '지금 위치로 새로 설정',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.72),
+                            fontFamily: 'Pretendard Variable',
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ],
             if (_stage == _HomeSetupStage.showRegisteredHome) ...[
               Text(
-                '파티션 가구에 이미 저장된 집이 있어요.\n'
-                '아래를 확인한 뒤 그대로 쓰거나 바꿀 수 있어요.',
+                widget.canChangeHouseholdHomeLocation
+                    ? '파티션 가구에 이미 저장된 집이 있어요.\n'
+                        '아래를 확인한 뒤 그대로 쓰거나 바꿀 수 있어요.'
+                    : '파티션 가구에 이미 저장된 집이 있어요.\n'
+                        '방장이 등록한 위치예요. 확인 후 귀가 공유를 켜 주세요.',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.76),
                   fontSize: 14,
@@ -1137,22 +1247,23 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
                 ),
               ),
               const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: _busy ? null : _goToChooseNewHome,
-                  child: Text(
-                    '다른 위치로 설정',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.68),
-                      fontSize: 14,
-                      fontFamily: 'Pretendard Variable',
-                      fontWeight: FontWeight.w500,
-                      decoration: TextDecoration.none,
+              if (widget.canChangeHouseholdHomeLocation)
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: _busy ? null : _goToChooseNewHome,
+                    child: Text(
+                      '다른 위치로 설정',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.68),
+                        fontSize: 14,
+                        fontFamily: 'Pretendard Variable',
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
             if (_stage == _HomeSetupStage.chooseNewHome) ...[
               if (_registeredCoords != null) ...[
@@ -1175,117 +1286,150 @@ class _HomeLocationSetupDialogState extends State<_HomeLocationSetupDialog> {
                 ),
                 const SizedBox(height: 8),
               ],
-              Text(
-                '집 반경 300m 안에 들어오면 룸메이트에게\n'
-                '조용한 알림이 전송됩니다.',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.76),
-                  fontSize: 14,
-                  height: 1.6,
-                  fontFamily: 'Pretendard Variable',
-                  fontWeight: FontWeight.w400,
-                  decoration: TextDecoration.none,
+              if (!widget.canChangeHouseholdHomeLocation) ...[
+                Text(
+                  '가구 집 위치는 그룹 방장만 등록할 수 있어요.\n'
+                  '방장에게 요청한 뒤 다시 시도해 주세요.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.76),
+                    fontSize: 14,
+                    height: 1.6,
+                    fontFamily: 'Pretendard Variable',
+                    fontWeight: FontWeight.w400,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _policyBox(),
-              const SizedBox(height: 20),
-              if (_gpsError != null) ...[
-                Container(
+                const SizedBox(height: 20),
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8B2942).withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    _gpsError!,
-                    style: TextStyle(
-                      color: Colors.red.shade300,
-                      fontSize: 13,
-                      fontFamily: 'Pretendard Variable',
-                      decoration: TextDecoration.none,
+                  child: TextButton(
+                    onPressed:
+                        _busy ? null : () => Navigator.of(context).pop(false),
+                    child: Text(
+                      '나중에 설정하기',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 14,
+                        fontFamily: 'Pretendard Variable',
+                        fontWeight: FontWeight.w400,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
-              ],
-              SizedBox(
-                width: double.infinity,
-                height: PartitionUiTokens.actionButtonHeight,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _busy ? null : _onSetCurrentLocation,
-                    borderRadius: BorderRadius.circular(
-                      PartitionUiTokens.actionButtonRadius,
+              ] else ...[
+                Text(
+                  '집 반경 300m 안에 들어오면 룸메이트에게\n'
+                  '조용한 알림이 전송됩니다.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.76),
+                    fontSize: 14,
+                    height: 1.6,
+                    fontFamily: 'Pretendard Variable',
+                    fontWeight: FontWeight.w400,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _policyBox(),
+                const SizedBox(height: 20),
+                if (_gpsError != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B2942).withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Opacity(
-                      opacity: _busy ? 0.55 : 1.0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(
-                            PartitionUiTokens.actionButtonRadius,
+                    child: Text(
+                      _gpsError!,
+                      style: TextStyle(
+                        color: Colors.red.shade300,
+                        fontSize: 13,
+                        fontFamily: 'Pretendard Variable',
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  height: PartitionUiTokens.actionButtonHeight,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _busy ? null : _onSetCurrentLocation,
+                      borderRadius: BorderRadius.circular(
+                        PartitionUiTokens.actionButtonRadius,
+                      ),
+                      child: Opacity(
+                        opacity: _busy ? 0.55 : 1.0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              PartitionUiTokens.actionButtonRadius,
+                            ),
+                            border: Border.all(
+                              color: PartitionUiTokens.actionButtonBorder,
+                            ),
+                            color: PartitionUiTokens.actionButtonFill,
                           ),
-                          border: Border.all(
-                            color: PartitionUiTokens.actionButtonBorder,
-                          ),
-                          color: PartitionUiTokens.actionButtonFill,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (_busy)
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (_busy)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.my_location_rounded,
+                                  size: 16,
                                   color: Colors.white,
                                 ),
-                              )
-                            else
-                              const Icon(
-                                Icons.my_location_rounded,
-                                size: 16,
-                                color: Colors.white,
+                              const SizedBox(width: 8),
+                              Text(
+                                _busy ? '위치 가져오는 중...' : '현재 위치를 집으로 설정',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: PartitionUiTokens.actionFontSize,
+                                  fontWeight: PartitionUiTokens.actionWeight,
+                                  fontFamily: 'Pretendard Variable',
+                                  decoration: TextDecoration.none,
+                                ),
                               ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _busy ? '위치 가져오는 중...' : '현재 위치를 집으로 설정',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: PartitionUiTokens.actionFontSize,
-                                fontWeight: PartitionUiTokens.actionWeight,
-                                fontFamily: 'Pretendard Variable',
-                                decoration: TextDecoration.none,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed:
-                      _busy ? null : () => Navigator.of(context).pop(false),
-                  child: Text(
-                    '나중에 설정하기',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.55),
-                      fontSize: 14,
-                      fontFamily: 'Pretendard Variable',
-                      fontWeight: FontWeight.w400,
-                      decoration: TextDecoration.none,
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed:
+                        _busy ? null : () => Navigator.of(context).pop(false),
+                    child: Text(
+                      '나중에 설정하기',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 14,
+                        fontFamily: 'Pretendard Variable',
+                        fontWeight: FontWeight.w400,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
           ],
         ),

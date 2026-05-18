@@ -61,6 +61,8 @@ class DailyCalendarItem {
   @JsonKey(fromJson: dailyCalendarApiString)
   final String title;
   final String? assigneeName;
+  final int? assigneeId;
+  final String? choreType;
   @JsonKey(fromJson: dailyCalendarApiBool)
   final bool isCompleted;
   final bool? isOwner;
@@ -70,6 +72,8 @@ class DailyCalendarItem {
     required this.id,
     required this.title,
     this.assigneeName,
+    this.assigneeId,
+    this.choreType,
     required this.isCompleted,
     this.isOwner,
   });
@@ -86,8 +90,18 @@ class DailyCalendarItem {
     );
     final assigneeRaw = json['assigneeName'] as String? ??
         json['assignee'] as String?;
-    dynamic idRaw = json['id'];
+    dynamic idRaw = json['id'] ?? json['choreId'];
     int idVal = dailyCalendarApiInt(idRaw);
+    final assigneeIdRaw = json['assigneeId'];
+    final assigneeIdParsed = assigneeIdRaw == null
+        ? null
+        : dailyCalendarApiInt(assigneeIdRaw, defaultValue: -1);
+    final assigneeId =
+        assigneeIdParsed != null && assigneeIdParsed > 0 ? assigneeIdParsed : null;
+    final choreTypeRaw = json['choreType'] as String?;
+    final choreType = choreTypeRaw?.trim().isNotEmpty == true
+        ? choreTypeRaw!.trim()
+        : null;
     if (idVal == 0 &&
         idRaw == null &&
         (titleRaw.isNotEmpty || categoryRaw.isNotEmpty)) {
@@ -101,6 +115,8 @@ class DailyCalendarItem {
       id: idVal,
       title: titleRaw,
       assigneeName: assigneeRaw,
+      assigneeId: assigneeId,
+      choreType: choreType,
       isCompleted: dailyCalendarApiBool(json['isCompleted']),
       isOwner: json['isOwner'] as bool?,
     );

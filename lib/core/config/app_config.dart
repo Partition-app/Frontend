@@ -35,6 +35,10 @@ class AppConfig {
   static const String schedulesEndpoint = '/schedules';
   static const String scheduleDetailEndpoint = '/schedules/{scheduleId}';
   static const String choresAutoAssignEndpoint = '/chores/auto-assign';
+  /// 집안일 수동 등록 등 컬렉션 (`POST /chores`)
+  static const String choresCollectionEndpoint = '/chores';
+  /// 날짜별 집안일 목록 (`GET`, query `date` yyyy-MM-dd)
+  static const String choresDailyEndpoint = '/chores/daily';
   /// 내 알림 목록 (GET)
   static const String alarmsEndpoint = '/alarms';
   /// 특정 알림 읽음 (PATCH)

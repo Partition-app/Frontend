@@ -4,10 +4,12 @@ import 'package:partition_app/core/network/api_exception.dart';
 import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 import 'package:partition_app/features/partition/services/chore_service.dart';
 import 'package:partition_app/features/partition/services/calendar_service.dart';
+import 'package:partition_app/shared/widgets/chore_assignment_common.dart';
+import 'package:partition_app/shared/widgets/chore_multi_select_dialog.dart';
 import 'package:partition_app/shared/widgets/partition_glass_dialog.dart';
 import 'package:partition_app/shared/widgets/partition_modal_close_button.dart';
 
-/// 집안일 자동 배정 모달
+/// AI 집안일 배정 모달
 class ChoreAssignmentModal extends StatefulWidget {
   final VoidCallback? onSuccess; // 배정 성공 시 호출될 콜백
 
@@ -40,61 +42,9 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = choreDateOnly(now);
     _visibleMonth = DateTime(today.year, today.month);
     _selectedDates.add(today);
-  }
-
-  final List<String> _allChores = [
-    '설거지',
-    '요리',
-    '빨래',
-    '음식물 쓰레기 버리기',
-    '분리수거',
-    '청소기 돌리기',
-    '바닥 닦기',
-    '창문, 창틀 닦기',
-    '화장실 청소',
-    '냉장고 청소',
-  ];
-
-  /// 집안일 이름을 API enum 값으로 변환
-  /// 프론트엔드 한국어 이름 -> 서버 enum 값
-  List<String> _convertChoreNamesToEnum(List<String> choreNames) {
-    // 집안일 이름 매핑 (프론트엔드 이름 -> API enum 값)
-    final nameMapping = {
-      '설거지': 'DISH_WASHING',
-      '요리': 'COOKING',
-      '빨래': 'LAUNDRY',
-      '음식물 쓰레기 버리기': 'FOODTRASH',
-      '분리수거': 'RECYCLING',
-      '청소기 돌리기': 'VACUUM',
-      '바닥 닦기': 'MOPPING',
-      '창문, 창틀 닦기': 'WINDOW',
-      '화장실 청소': 'BATHROOM',
-      '냉장고 청소': 'FRIDGE',
-    };
-
-    return choreNames.map((name) => nameMapping[name] ?? name).toList();
-  }
-
-  /// API enum 값에서 집안일 이름으로 역변환
-  /// 서버 enum 값 -> 프론트엔드 한국어 이름
-  String _convertEnumToChoreName(String enumValue) {
-    final enumMapping = {
-      'DISH_WASHING': '설거지',
-      'COOKING': '요리',
-      'LAUNDRY': '빨래',
-      'FOODTRASH': '음식물 쓰레기 버리기',
-      'RECYCLING': '분리수거',
-      'VACUUM': '청소기 돌리기',
-      'MOPPING': '바닥 닦기',
-      'WINDOW': '창문, 창틀 닦기',
-      'BATHROOM': '화장실 청소',
-      'FRIDGE': '냉장고 청소',
-    };
-
-    return enumMapping[enumValue] ?? enumValue;
   }
 
   /// 날짜 범위 내에 이미 배정된 집안일이 있는지 확인
@@ -108,9 +58,33 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
       // 날짜 범위 내의 모든 날짜 확인
       DateTime currentDate = startDate;
       while (!currentDate.isAfter(endDate)) {
-        final dateString = _formatDateForApi(currentDate);
+        final dateString = formatChoreDateForApi(currentDate);
 
-        // 해당 날짜의 일간 캘린더 조회
+        // 1) 신규 전용 API가 있으면 choreType 기준으로 중복 판별
+        try {
+          final choresDaily =
+              await _choreService.fetchDailyChores(date: dateString);
+          if (choresDaily.isSuccess && choresDaily.result != null) {
+            for (final choreType in choreTypes) {
+              final exists = choresDaily.result!.any(
+                (item) => item.choreType == choreType,
+              );
+              if (exists) {
+                return {
+                  'hasDuplicate': true,
+                  'choreName': choreEnumToDisplayName(choreType),
+                  'date': dateString,
+                };
+              }
+            }
+            currentDate = currentDate.add(const Duration(days: 1));
+            continue;
+          }
+        } catch (_) {
+          // 백엔드 미구현 등 → 아래 일간 캘린더 폴백
+        }
+
+        // 2) 폴백: 일간 캘린더의 CHORE 행으로 추정 중복 검사
         final response =
             await _calendarService.getDailyCalendar(date: dateString);
 
@@ -122,9 +96,9 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
 
           // 선택된 집안일과 중복 확인
           for (final choreType in choreTypes) {
-            final choreName = _convertEnumToChoreName(choreType);
+            final choreName = choreEnumToDisplayName(choreType);
 
-            // 이미 배정된 집안일 중에서 같은 이름이 있는지 확인
+            // 이미 배정된 집안일 중에서 같은 이름이 있는지 확인 (예: "빨래 하기", "빨래" 등)
             for (final existingChore in existingChores) {
               // title에 집안일 이름이 포함되어 있는지 확인 (예: "빨래 하기", "빨래" 등)
               if (existingChore.title.contains(choreName) ||
@@ -151,41 +125,28 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
     }
   }
 
-  String _formatDateForApi(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
-  }
-
-  DateTime _dateOnly(DateTime date) =>
-      DateTime(date.year, date.month, date.day);
-
-  bool _isSameDate(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
   DateTime get _today {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
+    return choreDateOnly(now);
   }
 
   DateTime get _lastSelectableDate => _today.add(const Duration(days: 14));
 
   bool _isDateSelectable(DateTime date) {
-    final normalized = _dateOnly(date);
+    final normalized = choreDateOnly(date);
     return !normalized.isBefore(_today) &&
         !normalized.isAfter(_lastSelectableDate);
   }
 
   bool _isVisibleMonthDateSelectable(DateTime date) {
-    final normalized = _dateOnly(date);
+    final normalized = choreDateOnly(date);
     final isVisibleMonth = normalized.year == _visibleMonth.year &&
         normalized.month == _visibleMonth.month;
     return isVisibleMonth && _isDateSelectable(normalized);
   }
 
   bool _isDateSelected(DateTime date) =>
-      _selectedDates.contains(_dateOnly(date));
+      _selectedDates.contains(choreDateOnly(date));
 
   bool _canGoPreviousMonth() {
     final previousMonth = DateTime(_visibleMonth.year, _visibleMonth.month - 1);
@@ -231,7 +192,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
   String _monthYearLabel(DateTime date) => '${date.year}년 ${date.month}월';
 
   void _toggleSingleDate(DateTime date) {
-    final normalized = _dateOnly(date);
+    final normalized = choreDateOnly(date);
     if (!_isVisibleMonthDateSelectable(normalized)) return;
 
     setState(() {
@@ -244,7 +205,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
   }
 
   void _applyDateSelection(DateTime date, bool shouldSelect) {
-    final normalized = _dateOnly(date);
+    final normalized = choreDateOnly(date);
     if (!_isDateSelectable(normalized)) return;
 
     if (shouldSelect) {
@@ -256,19 +217,19 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
 
   Iterable<DateTime> _iterateInclusiveDates(
       DateTime start, DateTime end) sync* {
-    DateTime cursor = _dateOnly(start);
-    final target = _dateOnly(end);
+    DateTime cursor = choreDateOnly(start);
+    final target = choreDateOnly(end);
     final step = cursor.isAfter(target) ? -1 : 1;
 
     while (true) {
       yield cursor;
-      if (_isSameDate(cursor, target)) break;
+      if (choreIsSameDate(cursor, target)) break;
       cursor = cursor.add(Duration(days: step));
     }
   }
 
   void _handleDragSelectionAt(DateTime date) {
-    final normalized = _dateOnly(date);
+    final normalized = choreDateOnly(date);
     if (!_isVisibleMonthDateSelectable(normalized)) return;
 
     setState(() {
@@ -297,7 +258,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
 
   void _updateDateDrag(DateTime date) {
     if (!_isDraggingDates) return;
-    if (_lastDraggedDate != null && _isSameDate(_lastDraggedDate!, date)) {
+    if (_lastDraggedDate != null && choreIsSameDate(_lastDraggedDate!, date)) {
       return;
     }
     _handleDragSelectionAt(date);
@@ -320,7 +281,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
 
     for (final date in sortedDates.skip(1)) {
       final nextExpected = rangeEnd.add(const Duration(days: 1));
-      if (_isSameDate(date, nextExpected)) {
+      if (choreIsSameDate(date, nextExpected)) {
         rangeEnd = date;
         continue;
       }
@@ -335,7 +296,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
   }
 
   String get _selectedChoresSummary {
-    final selected = _allChores.where(_selectedChores.contains).toList();
+    final selected = kChoreDisplayNames.where(_selectedChores.contains).toList();
     if (selected.isEmpty) return '집안일 선택';
     return selected.join(', ');
   }
@@ -344,8 +305,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
     final picked = await showDialog<Set<String>>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.55),
-      builder: (ctx) => _ChoreSelectionDialog(
-        allChores: _allChores,
+      builder: (ctx) => ChoreMultiSelectDialog(
         initialSelected: _selectedChores,
       ),
     );
@@ -390,7 +350,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
       final selectedRanges = _buildSelectedRanges();
 
       // 집안일 이름을 API enum 값으로 변환
-      final choreTypes = _convertChoreNamesToEnum(selectedChoresList);
+      final choreTypes = choreDisplayNamesToEnum(selectedChoresList);
 
       // 중복 여부 확인 (첫 번째 중복만 감지해서 한 번에 물어봄)
       Map<String, dynamic>? firstDuplicate;
@@ -559,21 +519,21 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
       }
 
       debugPrint('═══════════════════════════════════════════════════════');
-      debugPrint('🏠 집안일 자동 배정 요청');
+      debugPrint('🏠 AI 집안일 배정 요청');
       debugPrint('  - 선택된 집안일 개수: ${selectedChoresList.length}');
       debugPrint('  - 선택된 집안일 목록 (원본): $selectedChoresList');
       debugPrint('  - 변환된 choreTypes (API 전송용): $choreTypes');
       debugPrint('  - 선택 날짜 개수: ${_selectedDates.length}');
       debugPrint(
-        '  - 선택 구간: ${selectedRanges.map((range) => '${_formatDateForApi(range.start)} ~ ${_formatDateForApi(range.end)}').toList()}',
+        '  - 선택 구간: ${selectedRanges.map((range) => '${formatChoreDateForApi(range.start)} ~ ${formatChoreDateForApi(range.end)}').toList()}',
       );
-      debugPrint('  - 전체 집안일 목록: $_allChores');
+      debugPrint('  - 전체 집안일 목록: $kChoreDisplayNames');
       debugPrint('═══════════════════════════════════════════════════════');
 
       for (final range in selectedRanges) {
         await _choreService.autoAssignChores(
-          startDate: _formatDateForApi(range.start),
-          endDate: _formatDateForApi(range.end),
+          startDate: formatChoreDateForApi(range.start),
+          endDate: formatChoreDateForApi(range.end),
           choreTypes: choreTypes,
         );
       }
@@ -587,7 +547,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('집안일 자동 배정이 완료되었어요.'),
+          content: Text('AI 집안일 배정이 완료되었어요.'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -598,7 +558,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
         _isLoading = false;
       });
 
-      String message = '집안일 자동 배정에 실패했어요.';
+      String message = 'AI 집안일 배정에 실패했어요.';
       if (e is ApiException) {
         message = e.message;
       }
@@ -699,7 +659,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
                 const SizedBox(width: 40),
                 const Expanded(
                   child: Text(
-                    '집안일 자동 배정',
+                    'AI 집안일 배정',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
@@ -893,7 +853,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
                         final isSelectable =
                             _isVisibleMonthDateSelectable(date);
                         final isSelected = _isDateSelected(date);
-                        final isToday = _isSameDate(date, _today);
+                        final isToday = choreIsSameDate(date, _today);
 
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
@@ -959,7 +919,7 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
                         ),
                       )
                     : const Text(
-                        '자동 배정',
+                        'AI 배정',
                         style: TextStyle(
                           color: PartitionUiTokens.actionText,
                           fontSize: PartitionUiTokens.actionFontSize,
@@ -971,187 +931,6 @@ class _ChoreAssignmentModalState extends State<ChoreAssignmentModal> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ChoreSelectionDialog extends StatefulWidget {
-  const _ChoreSelectionDialog({
-    required this.allChores,
-    required this.initialSelected,
-  });
-
-  final List<String> allChores;
-  final Set<String> initialSelected;
-
-  @override
-  State<_ChoreSelectionDialog> createState() => _ChoreSelectionDialogState();
-}
-
-class _ChoreSelectionDialogState extends State<_ChoreSelectionDialog> {
-  late final Set<String> _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = Set<String>.from(widget.initialSelected);
-  }
-
-  void _toggle(String chore) {
-    setState(() {
-      if (_selected.contains(chore)) {
-        _selected.remove(chore);
-      } else {
-        _selected.add(chore);
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final dialogW = (size.width - 48).clamp(280.0, 340.0);
-    final dialogH = (size.height * 0.58).clamp(320.0, 500.0);
-
-    return PartitionGlassDialog(
-      constraints: BoxConstraints.tightFor(
-        width: dialogW,
-        height: dialogH,
-      ),
-      borderRadius: BorderRadius.circular(24),
-      blurSigma: 18,
-      borderColor: Colors.white.withOpacity(0.22),
-      gradient: const LinearGradient(
-        colors: [Colors.transparent, Colors.transparent],
-      ),
-      boxShadow: const [],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 4, 8),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '집안일 선택',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      fontFamily: 'Pretendard Variable',
-                      height: 1.2,
-                    ),
-                  ),
-                ),
-                PartitionModalCloseButton(
-                  onPressed: () => Navigator.pop(context),
-                  color: Colors.white70,
-                ),
-              ],
-            ),
-          ),
-          Divider(
-            height: 1,
-            thickness: 0.5,
-            color: Colors.white.withOpacity(0.22),
-          ),
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.only(bottom: 12),
-              physics: const BouncingScrollPhysics(),
-              itemCount: widget.allChores.length,
-              separatorBuilder: (_, __) => Divider(
-                height: 1,
-                thickness: 0.5,
-                color: Colors.white.withOpacity(0.08),
-              ),
-              itemBuilder: (context, index) {
-                final chore = widget.allChores[index];
-                final selected = _selected.contains(chore);
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _toggle(chore),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 18,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 1.5,
-                              ),
-                              color:
-                                  selected ? Colors.white : Colors.transparent,
-                            ),
-                            child: selected
-                                ? const Icon(
-                                    Icons.check,
-                                    size: 14,
-                                    color: Colors.black,
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              chore,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: selected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                fontFamily: 'Pretendard Variable',
-                                fontSize: 15,
-                                height: 1.35,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          Divider(
-            height: 1,
-            thickness: 0.5,
-            color: Colors.white.withOpacity(0.22),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => Navigator.pop(context, Set<String>.from(_selected)),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
-                child: Center(
-                  child: Text(
-                    '선택 완료',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Pretendard Variable',
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

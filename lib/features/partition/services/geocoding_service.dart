@@ -251,16 +251,18 @@ class GeocodingService {
     }
   }
 
-  // ── 주소 검색 (카카오 키워드 검색) ────────────────────────────────────────
+  // ── 주소 검색 (카카오 키워드 + 도로명·지번 주소) ───────────────────────────
 
-  /// 키워드로 장소·주소 검색 (카카오 Local keyword API)
-  /// 반환: (results, error) — error != null 이면 API 오류 메시지
-  static Future<SearchResult> searchPlaces(String query) async {
+  /// 키워드로 장소 검색 (카카오 Local keyword API)
+  static Future<SearchResult> _searchKeywordPlaces(String query) async {
     if (query.trim().isEmpty) {
       return (results: <PlaceSuggestion>[], error: null);
     }
     if (!hasApiKey) {
-      return (results: <PlaceSuggestion>[], error: '카카오 REST API 키가 설정되지 않았어요.');
+      return (
+        results: <PlaceSuggestion>[],
+        error: '카카오 REST API 키가 설정되지 않았어요.'
+      );
     }
 
     try {
@@ -269,45 +271,25 @@ class GeocodingService {
         '/v2/local/search/keyword.json',
         {'query': query, 'size': '7'},
       );
-      debugPrint('[GeocodingService] 검색 요청 → $uri');
+      debugPrint('[GeocodingService] 키워드 검색 → $uri');
 
       final response = await http.get(
         uri,
         headers: {'Authorization': 'KakaoAK ${AppConfig.kakaoRestApiKey}'},
       );
 
-      debugPrint('[GeocodingService] 검색 응답: ${response.statusCode}');
+      debugPrint('[GeocodingService] 키워드 응답: ${response.statusCode}');
 
       if (response.statusCode != 200) {
-        final body = response.body;
-        debugPrint('[GeocodingService] 검색 오류 바디: $body');
-
-        // 카카오 에러 코드 파싱
-        String errorMsg = '검색 오류 (${response.statusCode})';
-        try {
-          final errData = json.decode(body) as Map<String, dynamic>;
-          final msg = errData['msg'] as String?;
-          final code = errData['code'];
-          if (msg != null) errorMsg = '$msg (code: $code)';
-        } catch (_) {}
-
-        if (response.statusCode == 401) {
-          errorMsg = 'API 키 인증 실패 — REST API 키를 확인해주세요.';
-        } else if (response.statusCode == 403) {
-          errorMsg =
-              'API 권한 없음 — 제품 설정 → 카카오맵 사용 설정을 ON으로 해주세요.\n'
-              '(푸시로 온 카카오맵 오류 안내와 같을 수 있어요.)';
-        }
-        return (results: <PlaceSuggestion>[], error: errorMsg);
+        return (
+          results: <PlaceSuggestion>[],
+          error: _parseKakaoSearchError(response.statusCode, response.body),
+        );
       }
 
       final data = json.decode(response.body) as Map<String, dynamic>;
       final docs = data['documents'] as List<dynamic>;
-      debugPrint('[GeocodingService] 검색 결과: ${docs.length}건');
-
-      if (docs.isEmpty) {
-        return (results: <PlaceSuggestion>[], error: null);
-      }
+      debugPrint('[GeocodingService] 키워드 결과: ${docs.length}건');
 
       final suggestions = docs.map((d) {
         final doc = d as Map<String, dynamic>;
@@ -329,8 +311,168 @@ class GeocodingService {
 
       return (results: suggestions, error: null);
     } catch (e) {
-      debugPrint('[GeocodingService] 카카오 키워드 검색 예외: $e');
+      debugPrint('[GeocodingService] 키워드 검색 예외: $e');
       return (results: <PlaceSuggestion>[], error: '네트워크 오류: $e');
     }
+  }
+
+  /// 도로명·지번 주소 문자열 검색 (카카오 Local address API)
+  ///
+  /// 키워드 API는 등록된 「장소」 위주라, 명칭 없는 도로명주소만으로는 결과가 없을 수 있습니다.
+  static Future<SearchResult> _searchAddressDocuments(String query) async {
+    if (query.trim().isEmpty) {
+      return (results: <PlaceSuggestion>[], error: null);
+    }
+    if (!hasApiKey) {
+      return (results: <PlaceSuggestion>[], error: null);
+    }
+
+    try {
+      final uri = Uri.https(
+        'dapi.kakao.com',
+        '/v2/local/search/address.json',
+        {'query': query, 'size': '10'},
+      );
+      debugPrint('[GeocodingService] 주소 검색 → $uri');
+
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'KakaoAK ${AppConfig.kakaoRestApiKey}'},
+      );
+      debugPrint('[GeocodingService] 주소 응답: ${response.statusCode}');
+
+      if (response.statusCode != 200) {
+        return (
+          results: <PlaceSuggestion>[],
+          error: _parseKakaoSearchError(response.statusCode, response.body),
+        );
+      }
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final docs = data['documents'] as List<dynamic>;
+      debugPrint('[GeocodingService] 주소 결과: ${docs.length}건');
+
+      final suggestions = <PlaceSuggestion>[];
+      var index = 0;
+      for (final d in docs) {
+        final doc = d as Map<String, dynamic>;
+        final addressName = (doc['address_name'] as String?) ?? '';
+        final roadMap = doc['road_address'] as Map<String, dynamic>?;
+        final roadLine = (roadMap?['address_name'] as String?) ?? '';
+        final y = doc['y'] as String?;
+        final x = doc['x'] as String?;
+        final lat = double.tryParse(y ?? '') ?? 0;
+        final lng = double.tryParse(x ?? '') ?? 0;
+        if (lat == 0 && lng == 0) continue;
+
+        final mainLine =
+            roadLine.isNotEmpty ? roadLine : addressName;
+        if (mainLine.isEmpty) continue;
+
+        final secondary = roadLine.isNotEmpty &&
+                addressName.isNotEmpty &&
+                addressName != roadLine
+            ? addressName
+            : '';
+
+        suggestions.add(
+          PlaceSuggestion(
+            placeId: 'addr_${index++}_${lat}_$lng',
+            mainText: mainLine,
+            secondaryText: secondary,
+            formattedAddress:
+                roadLine.isNotEmpty ? roadLine : addressName,
+            lat: lat,
+            lng: lng,
+          ),
+        );
+      }
+
+      return (results: suggestions, error: null);
+    } catch (e) {
+      debugPrint('[GeocodingService] 주소 검색 예외: $e');
+      return (results: <PlaceSuggestion>[], error: '네트워크 오류: $e');
+    }
+  }
+
+  static String _parseKakaoSearchError(int statusCode, String body) {
+    var errorMsg = '검색 오류 ($statusCode)';
+    try {
+      final errData = json.decode(body) as Map<String, dynamic>;
+      final msg = errData['msg'] as String?;
+      final code = errData['code'];
+      if (msg != null) errorMsg = '$msg (code: $code)';
+    } catch (_) {}
+
+    if (statusCode == 401) {
+      return 'API 키 인증 실패 — REST API 키를 확인해주세요.';
+    }
+    if (statusCode == 403) {
+      return 'API 권한 없음 — 제품 설정 → 카카오맵 사용 설정을 ON으로 해주세요.\n'
+          '(푸시로 온 카카오맵 오류 안내와 같을 수 있어요.)';
+    }
+    return errorMsg;
+  }
+
+  /// 근접 좌표는 하나로 취급 (키워드·주소 API 중복 제거)
+  static bool _sameLocation(PlaceSuggestion a, PlaceSuggestion b) =>
+      (a.lat - b.lat).abs() < 1e-5 && (a.lng - b.lng).abs() < 1e-5;
+
+  static List<PlaceSuggestion> _mergePlaceSuggestions(
+    List<PlaceSuggestion> keywordFirst,
+    List<PlaceSuggestion> addressNext, {
+    int maxItems = 12,
+  }) {
+    final out = <PlaceSuggestion>[];
+    void tryAdd(PlaceSuggestion p) {
+      if (out.length >= maxItems) return;
+      if (p.lat == 0 && p.lng == 0) return;
+      final dup = out.any((e) => _sameLocation(e, p));
+      if (!dup) out.add(p);
+    }
+
+    for (final p in keywordFirst) {
+      tryAdd(p);
+    }
+    for (final p in addressNext) {
+      tryAdd(p);
+    }
+    return out;
+  }
+
+  /// 장소(키워드) + 도로명·지번 주소를 함께 검색합니다.
+  ///
+  /// 반환: (results, error) — 두 API 모두 실패할 때만 [error] 를 우선 반환합니다.
+  static Future<SearchResult> searchPlaces(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) {
+      return (results: <PlaceSuggestion>[], error: null);
+    }
+    if (!hasApiKey) {
+      return (
+        results: <PlaceSuggestion>[],
+        error: '카카오 REST API 키가 설정되지 않았어요.'
+      );
+    }
+
+    final results = await Future.wait([
+      _searchKeywordPlaces(q),
+      _searchAddressDocuments(q),
+    ]);
+    final keyword = results[0];
+    final address = results[1];
+
+    final merged = _mergePlaceSuggestions(
+      keyword.results,
+      address.results,
+      maxItems: 12,
+    );
+
+    final error = keyword.error ?? address.error;
+    if (merged.isEmpty && error != null) {
+      return (results: merged, error: error);
+    }
+
+    return (results: merged, error: null);
   }
 }

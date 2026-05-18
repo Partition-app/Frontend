@@ -34,6 +34,8 @@ Map<String, dynamic> _$DailyCalendarItemToJson(DailyCalendarItem instance) =>
       'id': instance.id,
       'title': instance.title,
       'assigneeName': instance.assigneeName,
+      'assigneeId': instance.assigneeId,
+      'choreType': instance.choreType,
       'isCompleted': instance.isCompleted,
       'isOwner': instance.isOwner,
     };

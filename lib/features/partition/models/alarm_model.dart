@@ -16,10 +16,22 @@ enum AlarmNoticeType {
     'BILL_SETTLEMENT_CONFIRMED',
     '공과금 정산이 완료되었습니다.',
   ),
-  /// 변동 공과금 이번 달 금액 미입력 알림 (`referenceId` = `billId`)
-  billAmountInputRequired(
-    'BILL_AMOUNT_INPUT_REQUIRED',
-    '이번달 공과금을 입력해주세요.',
+  /// 매월 공과금 알림 (`referenceId` = `billId`)
+  billPaymentReminder(
+    'BILL_PAYMENT_REMINDER',
+    '이번 달 공과금 금액을 입력해주세요.',
+  ),
+  choreAssigned(
+    'CHORE_ASSIGNED',
+    '{name}님의 새로운 집안일이 등록되었습니다.',
+  ),
+  choreUpdated(
+    'CHORE_UPDATED',
+    '{name}님의 집안일이 수정되었습니다.',
+  ),
+  choreDeleted(
+    'CHORE_DELETED',
+    '{name}님의 집안일이 삭제되었습니다.',
   ),
   unknown('', '');
 
@@ -29,15 +41,27 @@ enum AlarmNoticeType {
 
   static AlarmNoticeType parse(String? raw) {
     if (raw == null || raw.isEmpty) return AlarmNoticeType.unknown;
+    if (raw == 'BILL_AMOUNT_INPUT_REQUIRED') {
+      return AlarmNoticeType.billPaymentReminder;
+    }
     for (final v in AlarmNoticeType.values) {
       if (v.apiValue == raw) return v;
     }
     return AlarmNoticeType.unknown;
   }
 
-  /// 스펙 Enum 문구 우선. 미등록 타입은 서버 message.
+  bool get isChoreNotice =>
+      this == AlarmNoticeType.choreAssigned ||
+      this == AlarmNoticeType.choreUpdated ||
+      this == AlarmNoticeType.choreDeleted;
+
+  /// 스펙 Enum 문구 우선. 집안일·개인화 문구는 서버 `message` 우선.
   String resolvedMessage(String? serverMessage) {
     if (this == AlarmNoticeType.unknown) return serverMessage ?? '';
+    final trimmed = serverMessage?.trim();
+    if (isChoreNotice || defaultMessage.contains('{name}')) {
+      if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+    }
     return defaultMessage.isNotEmpty ? defaultMessage : (serverMessage ?? '');
   }
 
@@ -100,7 +124,7 @@ class AlarmItem {
 
   /// 이번 달 공과금 금액 입력 모달을 열 수 있는 알림인지 여부.
   bool get isUtilityBillAmountInputReminder {
-    if (type == AlarmNoticeType.billAmountInputRequired) return true;
+    if (type == AlarmNoticeType.billPaymentReminder) return true;
     final text = message.isNotEmpty ? message : displayMessage;
     if (!AlarmNoticeType.messageLooksLikeUtilityBillAmountInput(text)) {
       return false;

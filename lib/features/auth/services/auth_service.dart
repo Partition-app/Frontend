@@ -451,12 +451,44 @@ class AuthService {
 
   /// 그룹 멤버 목록 (설정/정산 API `memberIds` 연동).
   ///
-  /// API 형식:
-  /// `{ isSuccess, result: [ { userId, name, profileImage, role } ] }`
-  /// 또는 `result.members` 등.
+  /// 1. `GET /households/me` → `result.members` (스펙)
+  /// 2. 레거시 `GET /households/members`
+  /// 3. 로컬 본인만
   Future<List<HouseholdMemberBrief>> fetchHouseholdMembers() async {
+    final fromMe = await _fetchHouseholdMembersFromMeEndpoint();
+    if (fromMe.isNotEmpty) return fromMe;
+
+    final fromLegacy = await _fetchHouseholdMembersFromLegacyEndpoint();
+    if (fromLegacy.isNotEmpty) return fromLegacy;
+
+    return _fallbackHouseholdMembersBrief();
+  }
+
+  Future<List<HouseholdMemberBrief>> _fetchHouseholdMembersFromMeEndpoint() async {
     try {
-      // 배포 서버에 경로가 없을 때 404가 나와도 예외·인터셉터 에러 로그를 줄이기 위해 허용
+      final response = await _apiClient.get(
+        AppConfig.householdsMeEndpoint,
+        options: Options(
+          validateStatus: (status) =>
+              status != null && (status == 200 || status == 404),
+        ),
+      );
+      if (response.statusCode != 200) return [];
+      final data = response.data;
+      if (data is! Map<String, dynamic> || data['isSuccess'] != true) {
+        return [];
+      }
+      final result = data['result'];
+      if (result is! Map<String, dynamic>) return [];
+      return _parseHouseholdMemberBriefList(result['members']);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<HouseholdMemberBrief>>
+      _fetchHouseholdMembersFromLegacyEndpoint() async {
+    try {
       final response = await _apiClient.get(
         AppConfig.householdMembersEndpoint,
         options: Options(
@@ -464,54 +496,65 @@ class AuthService {
               status != null && (status == 200 || status == 404),
         ),
       );
-      if (response.statusCode == 404) {
-        return _fallbackHouseholdMembersBrief();
-      }
+      if (response.statusCode == 404) return [];
       final data = response.data;
-      if (data is! Map<String, dynamic>) {
-        return _fallbackHouseholdMembersBrief();
-      }
-      if (data['isSuccess'] == false) {
-        return _fallbackHouseholdMembersBrief();
+      if (data is! Map<String, dynamic> || data['isSuccess'] == false) {
+        return [];
       }
       final dynamic result = data['result'];
-      List<dynamic>? list;
       if (result is List) {
-        list = result;
-      } else if (result is Map<String, dynamic>) {
+        return _parseHouseholdMemberBriefList(result);
+      }
+      if (result is Map<String, dynamic>) {
         final m = result['members'] ??
             result['memberList'] ??
             result['users'] ??
             result['userList'];
-        if (m is List) list = m;
+        return _parseHouseholdMemberBriefList(m);
       }
-      if (list == null || list.isEmpty) {
-        return _fallbackHouseholdMembersBrief();
-      }
-      final out = <HouseholdMemberBrief>[];
-      for (final e in list) {
-        if (e is Map<String, dynamic>) {
-          final id = _parseHouseholdMemberUserId(e);
-          final name = _parseHouseholdMemberDisplayName(e);
-          if (id != null && id > 0 && name != null) {
-            out.add(
-              HouseholdMemberBrief(
-                userId: id,
-                name: name,
-                profileImage: _parseHouseholdMemberProfileImage(e),
-                role: _parseHouseholdMemberRole(e),
-              ),
-            );
-          }
-        }
-      }
-      if (out.isEmpty) {
-        return _fallbackHouseholdMembersBrief();
-      }
-      return out;
-    } catch (e) {
-      return _fallbackHouseholdMembersBrief();
+      return [];
+    } catch (_) {
+      return [];
     }
+  }
+
+  List<HouseholdMemberBrief> _parseHouseholdMemberBriefList(dynamic raw) {
+    if (raw is! List || raw.isEmpty) return [];
+    final out = <HouseholdMemberBrief>[];
+    for (final e in raw) {
+      if (e is! Map<String, dynamic>) continue;
+      final id = _parseHouseholdMemberUserId(e);
+      final name = _parseHouseholdMemberDisplayName(e);
+      if (id != null && id > 0 && name != null) {
+        out.add(
+          HouseholdMemberBrief(
+            userId: id,
+            name: name,
+            profileImage: _parseHouseholdMemberProfileImage(e),
+            role: _parseHouseholdMemberRole(e),
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  List<HouseholdMemberBrief> householdMembersFromResult(
+    HouseholdResult? result,
+  ) {
+    final members = result?.members;
+    if (members == null || members.isEmpty) return [];
+    return members
+        .where((m) => m.userId > 0 && m.name.isNotEmpty)
+        .map(
+          (m) => HouseholdMemberBrief(
+            userId: m.userId,
+            name: m.name,
+            profileImage: m.profileImage,
+            role: m.role,
+          ),
+        )
+        .toList();
   }
 
   Future<List<HouseholdMemberBrief>> _fallbackHouseholdMembersBrief() async {

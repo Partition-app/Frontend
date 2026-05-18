@@ -64,7 +64,7 @@ class _ScheduleRegistrationModalState extends State<ScheduleRegistrationModal> {
     final picked = await showDialog<DateTime>(
       context: context,
       barrierColor: Colors.black.withOpacity(0.55),
-      builder: (ctx) => _ScheduleRegistrationDatePickerDialog(
+      builder: (ctx) => ScheduleRegistrationDatePickerDialog(
         initialDate: _selectedDate,
         firstDate: DateTime(2020, 1, 1),
         lastDate: DateTime(2100, 12, 31),
@@ -382,8 +382,10 @@ class _ScheduleRegistrationModalState extends State<ScheduleRegistrationModal> {
   }
 }
 
-class _ScheduleRegistrationDatePickerDialog extends StatefulWidget {
-  const _ScheduleRegistrationDatePickerDialog({
+/// 일정 등록·수정 공통 날짜 선택 (글래스 블러)
+class ScheduleRegistrationDatePickerDialog extends StatefulWidget {
+  const ScheduleRegistrationDatePickerDialog({
+    super.key,
     required this.initialDate,
     required this.firstDate,
     required this.lastDate,
@@ -394,12 +396,12 @@ class _ScheduleRegistrationDatePickerDialog extends StatefulWidget {
   final DateTime lastDate;
 
   @override
-  State<_ScheduleRegistrationDatePickerDialog> createState() =>
+  State<ScheduleRegistrationDatePickerDialog> createState() =>
       _ScheduleRegistrationDatePickerDialogState();
 }
 
 class _ScheduleRegistrationDatePickerDialogState
-    extends State<_ScheduleRegistrationDatePickerDialog> {
+    extends State<ScheduleRegistrationDatePickerDialog> {
   late DateTime _selectedDate;
 
   @override
