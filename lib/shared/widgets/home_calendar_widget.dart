@@ -121,6 +121,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
   final Set<int> _choreToggleInProgress = {};
   /// 집안일 더미/월간 집계용 담당자 표시명(로그인·로컬 이름)
   String _meNameForChores = '나';
+  int? _myUserId;
   /// 월간 더미 집안일(음수 id) 로컬 완료 — 서버와 별개
   final Map<int, bool> _previewChoreCompleted = {};
 
@@ -152,7 +153,68 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
 
   bool _assigneeNameMatchesMe(String? assignee, String meName) {
     if (assignee == null || assignee.trim().isEmpty) return false;
-    return assignee.trim().toLowerCase() == meName.trim().toLowerCase();
+    final a = assignee.trim().toLowerCase();
+    final m = meName.trim().toLowerCase();
+    if (a == m) return true;
+    // "홍길동 · 설거지" 형태·앞뒤 공백 차이
+    if (a.startsWith('$m ·') || a.startsWith('$m·')) return true;
+    return false;
+  }
+
+  Future<void> _refreshMeIdentity() async {
+    var meName = await _resolveMeName();
+    int? parsedId;
+
+    try {
+      final authUser =
+          Provider.of<AuthProvider>(context, listen: false).user;
+      if (authUser != null) {
+        parsedId = int.tryParse(authUser.id);
+        final authName = authUser.name?.trim();
+        if (authName != null && authName.isNotEmpty) {
+          meName = authName;
+        }
+      }
+    } catch (_) {}
+
+    parsedId ??= int.tryParse(await StorageService.getUserId() ?? '');
+
+    if (!mounted) return;
+    setState(() {
+      _meNameForChores = meName;
+      if (parsedId != null && parsedId > 0) {
+        _myUserId = parsedId;
+      }
+    });
+  }
+
+  /// 본인 담당 집안일 여부 — API `isOwner`가 비어 있거나 틀릴 때 assigneeId·이름으로 보완
+  bool _resolveChoreIsOwner({
+    int? assigneeId,
+    String? assigneeName,
+    bool? apiIsOwner,
+  }) {
+    if (_myUserId != null &&
+        assigneeId != null &&
+        assigneeId > 0 &&
+        assigneeId == _myUserId) {
+      return true;
+    }
+    if (apiIsOwner == true) return true;
+    if (assigneeName != null &&
+        assigneeName.trim().isNotEmpty &&
+        _assigneeNameMatchesMe(assigneeName, _meNameForChores)) {
+      return true;
+    }
+    return apiIsOwner ?? false;
+  }
+
+  bool _isChoreEventOwnedByMe(_CalendarEvent event) {
+    return _resolveChoreIsOwner(
+      assigneeId: event.assigneeId,
+      assigneeName: event.assigneeName,
+      apiIsOwner: event.isOwner,
+    );
   }
 
   /// 서버 자동 일정·공과금·월세 등이 `SCHEDULE` + 특정 담당자명으로 오는 경우
@@ -205,14 +267,13 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         }
       }
 
-      bool? isOwnerForEvent = item.isOwner;
-      if (cat == 'CHORE' &&
-          isOwnerForEvent == null &&
-          item.assigneeName != null &&
-          item.assigneeName!.trim().isNotEmpty) {
-        isOwnerForEvent =
-            _assigneeNameMatchesMe(item.assigneeName, _meNameForChores);
-      }
+      final bool? isOwnerForEvent = cat == 'CHORE'
+          ? _resolveChoreIsOwner(
+              assigneeId: item.assigneeId,
+              assigneeName: item.assigneeName,
+              apiIsOwner: item.isOwner,
+            )
+          : item.isOwner;
 
       return _CalendarEvent(
         eventType,
@@ -548,6 +609,9 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     });
 
     try {
+      await _refreshMeIdentity();
+      if (!mounted) return;
+
       final response = await _calendarService.getDailyCalendar(
         date: dateKey,
       );
@@ -975,7 +1039,8 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           // 집안일: 완료 체크는 본인 담당만, 수정·삭제는 그룹 집안일 전체
           final isChoreItem =
               event.type == CalendarEventType.chore && cat == 'CHORE' && event.id != null;
-          final canToggleChore = isChoreItem && event.isOwner == true;
+          final canToggleChore =
+              isChoreItem && _isChoreEventOwnedByMe(event);
           final canManageChore =
               isChoreItem && event.id != null && event.id! > 0;
 
@@ -1160,15 +1225,21 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         final detail = byChoreId[item.id];
         if (detail == null) return item;
         changed = true;
+        final assigneeId = detail.assigneeId ?? item.assigneeId;
+        final assigneeName = detail.assigneeName ?? item.assigneeName;
         return DailyCalendarItem(
           category: item.category,
           id: item.id,
           title: detail.choreName.isNotEmpty ? detail.choreName : item.title,
-          assigneeName: detail.assigneeName,
-          assigneeId: detail.assigneeId,
+          assigneeName: assigneeName,
+          assigneeId: assigneeId,
           choreType: detail.choreType,
           isCompleted: detail.isCompleted,
-          isOwner: item.isOwner,
+          isOwner: _resolveChoreIsOwner(
+            assigneeId: assigneeId,
+            assigneeName: assigneeName,
+            apiIsOwner: item.isOwner,
+          ),
         );
       }).toList();
 
@@ -1709,10 +1780,8 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final me = await _resolveMeName();
-      if (mounted && me != _meNameForChores) {
-        setState(() => _meNameForChores = me);
-      }
+      await _refreshMeIdentity();
+      if (!mounted) return;
       _loadCalendarData(_currentMonth.year, _currentMonth.month);
     });
   }

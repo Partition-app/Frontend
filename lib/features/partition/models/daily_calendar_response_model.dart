@@ -19,6 +19,18 @@ int dailyCalendarApiInt(dynamic value, {int defaultValue = 0}) {
 }
 
 /// 일정 항목은 `isCompleted`가 null/false인 경우가 있어 null 안전 처리.
+bool? _parseDailyIsOwner(dynamic value) {
+  if (value == null) return null;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final v = value.toLowerCase().trim();
+    if (v == 'true' || v == '1' || v == 'yes') return true;
+    if (v == 'false' || v == '0' || v == 'no') return false;
+  }
+  return null;
+}
+
 bool dailyCalendarApiBool(dynamic value) {
   if (value == null) return false;
   if (value is bool) return value;
@@ -118,7 +130,7 @@ class DailyCalendarItem {
       assigneeId: assigneeId,
       choreType: choreType,
       isCompleted: dailyCalendarApiBool(json['isCompleted']),
-      isOwner: json['isOwner'] as bool?,
+      isOwner: _parseDailyIsOwner(json['isOwner'] ?? json['isMine'] ?? json['mine']),
     );
   }
 
