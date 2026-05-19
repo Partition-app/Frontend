@@ -188,33 +188,30 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     });
   }
 
-  /// 본인 담당 집안일 여부 — API `isOwner`가 비어 있거나 틀릴 때 assigneeId·이름으로 보완
-  bool _resolveChoreIsOwner({
-    int? assigneeId,
-    String? assigneeName,
-    bool? apiIsOwner,
-  }) {
+  /// GET `/calendars/daily` — Swagger `isOwner` 우선, 없을 때만 담당자 ID·이름으로 추정
+  bool _choreOwnedByMe(DailyCalendarItem item) {
+    if (item.isOwner == true) return true;
+    if (item.isOwner == false) return false;
     if (_myUserId != null &&
-        assigneeId != null &&
-        assigneeId > 0 &&
-        assigneeId == _myUserId) {
+        item.assigneeId != null &&
+        item.assigneeId! > 0 &&
+        item.assigneeId == _myUserId) {
       return true;
     }
-    if (apiIsOwner == true) return true;
-    if (assigneeName != null &&
-        assigneeName.trim().isNotEmpty &&
-        _assigneeNameMatchesMe(assigneeName, _meNameForChores)) {
+    if (item.assigneeName != null &&
+        item.assigneeName!.trim().isNotEmpty &&
+        _assigneeNameMatchesMe(item.assigneeName, _meNameForChores)) {
       return true;
     }
-    return apiIsOwner ?? false;
+    return false;
   }
 
-  bool _isChoreEventOwnedByMe(_CalendarEvent event) {
-    return _resolveChoreIsOwner(
-      assigneeId: event.assigneeId,
-      assigneeName: event.assigneeName,
-      apiIsOwner: event.isOwner,
-    );
+  /// 완료 체크박스 — 일간 API `isOwner: true`인 CHORE만 (양수 choreId)
+  bool _canShowChoreCompletionCheckbox(_CalendarEvent event) {
+    if (event.id == null || event.id! <= 0) return false;
+    if (event.dailyApiIsOwner == true) return true;
+    if (event.dailyApiIsOwner == false) return false;
+    return event.isOwner == true;
   }
 
   /// 서버 자동 일정·공과금·월세 등이 `SCHEDULE` + 특정 담당자명으로 오는 경우
@@ -267,13 +264,9 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         }
       }
 
-      final bool? isOwnerForEvent = cat == 'CHORE'
-          ? _resolveChoreIsOwner(
-              assigneeId: item.assigneeId,
-              assigneeName: item.assigneeName,
-              apiIsOwner: item.isOwner,
-            )
-          : item.isOwner;
+      final bool? dailyApiIsOwner = cat == 'CHORE' ? item.isOwner : null;
+      final bool? isOwnerForEvent =
+          cat == 'CHORE' ? _choreOwnedByMe(item) : item.isOwner;
 
       return _CalendarEvent(
         eventType,
@@ -284,6 +277,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         assigneeId: item.assigneeId,
         choreType: item.choreType,
         choreTitle: cat == 'CHORE' ? item.title : null,
+        dailyApiIsOwner: dailyApiIsOwner,
         isOwner: isOwnerForEvent,
         isCompleted: item.isCompleted,
       );
@@ -348,6 +342,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           id: id,
           category: 'CHORE',
           assigneeName: assignee,
+          dailyApiIsOwner: isMine,
           isOwner: isMine,
           isCompleted: false,
         ));
@@ -433,6 +428,10 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           id: ev.id,
           category: ev.category,
           assigneeName: ev.assigneeName,
+          assigneeId: ev.assigneeId,
+          choreType: ev.choreType,
+          choreTitle: ev.choreTitle,
+          dailyApiIsOwner: ev.dailyApiIsOwner,
           isOwner: ev.isOwner,
           isCompleted: c,
         );
@@ -515,6 +514,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
               id: id,
               category: 'CHORE',
               assigneeName: assignee,
+              dailyApiIsOwner: isMine,
               isOwner: isMine,
               isCompleted: false,
             ));
@@ -1040,7 +1040,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           final isChoreItem =
               event.type == CalendarEventType.chore && cat == 'CHORE' && event.id != null;
           final canToggleChore =
-              isChoreItem && _isChoreEventOwnedByMe(event);
+              isChoreItem && _canShowChoreCompletionCheckbox(event);
           final canManageChore =
               isChoreItem && event.id != null && event.id! > 0;
 
@@ -1227,7 +1227,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         changed = true;
         final assigneeId = detail.assigneeId ?? item.assigneeId;
         final assigneeName = detail.assigneeName ?? item.assigneeName;
-        return DailyCalendarItem(
+        final merged = DailyCalendarItem(
           category: item.category,
           id: item.id,
           title: detail.choreName.isNotEmpty ? detail.choreName : item.title,
@@ -1235,12 +1235,24 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           assigneeId: assigneeId,
           choreType: detail.choreType,
           isCompleted: detail.isCompleted,
-          isOwner: _resolveChoreIsOwner(
-            assigneeId: assigneeId,
-            assigneeName: assigneeName,
-            apiIsOwner: item.isOwner,
-          ),
+          isOwner: item.isOwner == true
+              ? true
+              : (item.isOwner == false
+                  ? false
+                  : _choreOwnedByMe(
+                      DailyCalendarItem(
+                        category: item.category,
+                        id: item.id,
+                        title: item.title,
+                        assigneeName: assigneeName,
+                        assigneeId: assigneeId,
+                        choreType: detail.choreType,
+                        isCompleted: detail.isCompleted,
+                        isOwner: null,
+                      ),
+                    )),
         );
+        return merged;
       }).toList();
 
       if (!changed || !mounted) return;
@@ -2215,6 +2227,8 @@ class _CalendarEvent {
   final int? assigneeId;
   final String? choreType;
   final String? choreTitle;
+  /// GET `/calendars/daily` 원본 `isOwner` (체크박스 판단용)
+  final bool? dailyApiIsOwner;
   final bool? isOwner;
   final bool? isCompleted;
 
@@ -2227,6 +2241,7 @@ class _CalendarEvent {
     this.assigneeId,
     this.choreType,
     this.choreTitle,
+    this.dailyApiIsOwner,
     this.isOwner,
     this.isCompleted,
   });

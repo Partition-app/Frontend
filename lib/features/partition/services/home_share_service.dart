@@ -170,25 +170,62 @@ class RoommateNearHomeStatus {
             data['message']?.toString() ?? '룸메이트 귀가 현황 조회에 실패했습니다.',
       );
     }
-    final result = data['result'];
-    if (result == null) return const [];
-    if (result is! List) {
-      throw ApiException(message: '룸메이트 귀가 현황 결과 형식이 올바르지 않습니다.');
-    }
+    final items = _extractStatusItems(data['result']);
     final out = <RoommateNearHomeStatus>[];
-    for (final item in result) {
+    for (final item in items) {
       if (item is! Map<String, dynamic>) continue;
-      final userId = (item['userId'] as num?)?.toInt();
+      final userId = _parseUserId(item);
       if (userId == null) continue;
       out.add(
         RoommateNearHomeStatus(
           userId: userId,
-          name: item['name']?.toString() ?? '',
-          isNearHome: item['isNearHome'] == true,
+          name: _parseDisplayName(item),
+          isNearHome: _parseNearHomeFlag(
+            item['isNearHome'] ?? item['nearHome'] ?? item['near_home'],
+          ),
         ),
       );
     }
     return out;
+  }
+
+  static List<dynamic> _extractStatusItems(dynamic result) {
+    if (result == null) return const [];
+    if (result is List) return result;
+    if (result is Map<String, dynamic>) {
+      final nested = result['members'] ??
+          result['memberList'] ??
+          result['roommates'] ??
+          result['users'] ??
+          result['userList'] ??
+          result['statuses'] ??
+          result['nearHomeMembers'];
+      if (nested is List) return nested;
+    }
+    return const [];
+  }
+
+  static int? _parseUserId(Map<String, dynamic> item) {
+    for (final key in ['userId', 'memberId', 'id']) {
+      final id = (item[key] as num?)?.toInt();
+      if (id != null && id > 0) return id;
+    }
+    return null;
+  }
+
+  static String _parseDisplayName(Map<String, dynamic> item) {
+    for (final key in ['name', 'nickname', 'userName', 'memberName']) {
+      final value = item[key]?.toString();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  static bool _parseNearHomeFlag(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final normalized = value?.toString().trim().toLowerCase();
+    return normalized == 'true' || normalized == '1' || normalized == 'y';
   }
 }
 

@@ -524,7 +524,7 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
                         const SizedBox(width: 40),
                         const Expanded(
                           child: Text(
-                            '설정',
+                            '그룹 설정',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white,

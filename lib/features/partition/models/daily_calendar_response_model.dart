@@ -130,7 +130,13 @@ class DailyCalendarItem {
       assigneeId: assigneeId,
       choreType: choreType,
       isCompleted: dailyCalendarApiBool(json['isCompleted']),
-      isOwner: _parseDailyIsOwner(json['isOwner'] ?? json['isMine'] ?? json['mine']),
+      isOwner: _parseDailyIsOwner(
+        json['isOwner'] ??
+            json['is_owner'] ??
+            json['isMine'] ??
+            json['mine'] ??
+            json['owner'],
+      ),
     );
   }
 

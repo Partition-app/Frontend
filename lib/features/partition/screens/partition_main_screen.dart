@@ -224,6 +224,28 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
     }
   }
 
+  /// 읽은 알림만 스와이프 삭제 — `DELETE /api/alarms/{alarmId}`
+  Future<bool> _confirmAlarmSwipeDelete(AlarmItem item) async {
+    if (!item.isRead) return false;
+    try {
+      await _alarmService.deleteAlarm(item.alarmId);
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      final msg = e is ApiException ? e.message : '알림을 삭제하지 못했습니다.';
+      _showAlarmApiFeedback(msg, isError: true);
+      return false;
+    }
+  }
+
+  void _onAlarmSwipeDismissed(AlarmItem item) {
+    if (!mounted) return;
+    setState(() {
+      _alarms.removeWhere((a) => a.alarmId == item.alarmId);
+      _alarmMarkReadBusy.remove(item.alarmId);
+    });
+  }
+
   /// FCM `data`에 `settlementId`·`referenceId`·`type`(또는 `alarmType`)·선택 `alarmId` 포함 시 공용소비로 이동.
   /// `type: NEAR_HOME_ARRIVAL` 이면 알림 패널 상단 귀가 배너를 갱신합니다.
   void _handleFcmRemoteOpenForAlarmNavigation(RemoteMessage message) {
@@ -286,11 +308,21 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   }
 
   bool _tryHandleNearHomeArrivalFcm(RemoteMessage message) {
-    final type = message.data['type']?.toString() ??
-        message.data['alarmType']?.toString() ??
-        '';
+    final data = message.data;
+    final type =
+        data['type']?.toString() ?? data['alarmType']?.toString() ?? '';
     if (type != 'NEAR_HOME_ARRIVAL') return false;
-    context.read<HomeShareProvider>().applyRoommateNearHomeEvent();
+    final senderName = data['senderName']?.toString();
+    final senderUserId = int.tryParse(
+      data['userId']?.toString() ??
+          data['senderId']?.toString() ??
+          data['senderUserId']?.toString() ??
+          '',
+    );
+    context.read<HomeShareProvider>().applyRoommateNearHomeEvent(
+          senderName: senderName,
+          senderUserId: senderUserId,
+        );
     debugPrint('[HomeShare] NEAR_HOME_ARRIVAL FCM 수신 → 귀가 배너 갱신');
     return true;
   }
@@ -746,18 +778,31 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   Widget _buildNotificationBody() {
     context.watch<AlarmNavigationController>();
     final homeShare = context.watch<HomeShareProvider>();
-    final roommateNearHome = homeShare.roommateNearHome;
+    final nearRoommates = homeShare.nearHomeRoommates;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: _buildRoommateNearHomeBanner(
-            nearHome: roommateNearHome,
-            bannerText: homeShare.roommateNearHomeBannerText,
+        if (nearRoommates.isNotEmpty)
+          ...nearRoommates.map(
+            (roommate) => Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: _buildRoommateNearHomeBanner(
+                nearHome: true,
+                bannerText: homeShare.roommateNearHomeBannerText(roommate),
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: _buildRoommateNearHomeBanner(
+              nearHome: homeShare.roommateNearHome,
+              bannerText: homeShare.roommateNearHome
+                  ? '룸메이트가 집 근처에 있어요.'
+                  : '룸메이트가 집 근처에 없어요.',
+            ),
           ),
-        ),
         Expanded(child: _buildAlarmListBody()),
       ],
     );
@@ -822,6 +867,77 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
               color: accent.withOpacity(nearHome ? 0.92 : 0.55),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlarmListTile(
+    AlarmItem item, {
+    required String subLine,
+    required bool read,
+  }) {
+    return DecoratedBox(
+      decoration: _alarmRowDecoration(read: read),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Material(
+            color: _alarmRowFillColor(read: read),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => unawaited(_onAlarmRowTapped(item)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 14,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, right: 10),
+                      child: _buildAlarmLeadingIndicator(item),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.displayMessage,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(
+                                read ? 0.82 : 0.97,
+                              ),
+                              fontSize: 15,
+                              fontWeight:
+                                  read ? FontWeight.w500 : FontWeight.w700,
+                              height: 1.35,
+                              decoration: TextDecoration.none,
+                              decorationColor: Colors.transparent,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            subLine,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(
+                                read ? 0.46 : 0.54,
+                              ),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -913,108 +1029,28 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
                 ? '정산번호 ${item.referenceId} · ${_formatAlarmTime(item.createdAt)}'
                 : _formatAlarmTime(item.createdAt);
         final read = item.isRead;
+        final row = _buildAlarmListTile(item, subLine: subLine, read: read);
         return ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: Dismissible(
-            key: ValueKey<int>(item.alarmId),
-            direction: DismissDirection.endToStart,
-            confirmDismiss: (direction) async {
-              try {
-                await _alarmService.deleteAlarm(item.alarmId);
-                return true;
-              } catch (e) {
-                if (!mounted) return false;
-                final msg = e is ApiException ? e.message : '알림을 삭제하지 못했습니다.';
-                _showAlarmApiFeedback(msg, isError: true);
-                return false;
-              }
-            },
-            onDismissed: (_) {
-              if (!mounted) return;
-              setState(() {
-                _alarms.removeWhere((a) => a.alarmId == item.alarmId);
-                _alarmMarkReadBusy.remove(item.alarmId);
-                if (!item.isRead && _alarmUnreadCount > 0) {
-                  _alarmUnreadCount = _alarmUnreadCount - 1;
-                }
-              });
-            },
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20),
-              color: const Color(0xFF8B2942),
-              child: Icon(
-                Icons.delete_outline_rounded,
-                color: Colors.white.withOpacity(0.92),
-                size: 26,
-              ),
-            ),
-            child: DecoratedBox(
-              decoration: _alarmRowDecoration(read: read),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: Material(
-                    color: _alarmRowFillColor(read: read),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () => unawaited(_onAlarmRowTapped(item)),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 14,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 3, right: 10),
-                              child: _buildAlarmLeadingIndicator(item),
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.displayMessage,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(
-                                        read ? 0.82 : 0.97,
-                                      ),
-                                      fontSize: 15,
-                                      fontWeight: read
-                                          ? FontWeight.w500
-                                          : FontWeight.w700,
-                                      height: 1.35,
-                                      decoration: TextDecoration.none,
-                                      decorationColor: Colors.transparent,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    subLine,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(
-                                        read ? 0.46 : 0.54,
-                                      ),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      decoration: TextDecoration.none,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+          child: read
+              ? Dismissible(
+                  key: ValueKey<int>(item.alarmId),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (_) => _confirmAlarmSwipeDelete(item),
+                  onDismissed: (_) => _onAlarmSwipeDismissed(item),
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    color: const Color(0xFF8B2942),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.white.withOpacity(0.92),
+                      size: 26,
                     ),
                   ),
-                ),
-              ),
-            ),
-          ),
+                  child: row,
+                )
+              : row,
         );
       },
     );

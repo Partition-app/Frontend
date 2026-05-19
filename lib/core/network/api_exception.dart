@@ -3,11 +3,14 @@ import 'package:dio/dio.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
+  /// 서버 `code` (예: `RESERVATION_2005`)
+  final String? code;
   final dynamic originalError;
 
   ApiException({
     required this.message,
     this.statusCode,
+    this.code,
     this.originalError,
   });
 
@@ -28,10 +31,11 @@ class ApiException implements Exception {
             originalError: error,
           );
         case DioExceptionType.badResponse:
-          final code = error.response?.statusCode;
+          final statusCode = error.response?.statusCode;
           String errorMessage = '서버 오류가 발생했습니다.';
+          String? apiCode;
 
-          if (code == 413) {
+          if (statusCode == 413) {
             errorMessage =
                 '파일 용량이 서버에서 허용하는 한도를 넘었습니다. (예: 음성 25MB, 이미지 업로드 제한)';
           } else {
@@ -39,6 +43,7 @@ class ApiException implements Exception {
             try {
               final responseData = error.response?.data;
               if (responseData is Map<String, dynamic>) {
+                apiCode = responseData['code']?.toString();
                 final detail = responseData['detail'];
                 if (detail is String && detail.trim().isNotEmpty) {
                   errorMessage = detail.trim();
@@ -61,7 +66,7 @@ class ApiException implements Exception {
                 // HTML(nginx 오류 페이지 등)이면 본문 대신 코드만
                 if (s.startsWith('<!') || s.startsWith('<html')) {
                   errorMessage =
-                      '서버 오류가 발생했습니다. (${code ?? '?'})';
+                      '서버 오류가 발생했습니다. (${statusCode ?? '?'})';
                 } else {
                   errorMessage = s;
                 }
@@ -74,7 +79,8 @@ class ApiException implements Exception {
 
           return ApiException(
             message: errorMessage,
-            statusCode: code,
+            statusCode: statusCode,
+            code: apiCode,
             originalError: error,
           );
         case DioExceptionType.cancel:

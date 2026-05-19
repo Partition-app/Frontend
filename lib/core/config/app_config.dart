@@ -99,6 +99,12 @@ class AppConfig {
 
   /// 예약 목록 조회·예약 등록 (`GET`·`POST`, 쿼리 `startDate`·`endDate` / 본문 `itemId`·시간)
   static const String reservationsEndpoint = '/reservations';
+  /// 예약 완료 처리 (`PATCH`, 본문 없음)
+  static String reservationsCompletePath(int reservationId) =>
+      '/reservations/$reservationId/complete';
+  /// 예약 수정 (`PATCH`)
+  static String reservationsDetailPath(int reservationId) =>
+      '/reservations/$reservationId';
 
   /// PARTITION_AI (FastAPI). Spring에서 받은 액세스 토큰을 그대로 Bearer로 전달합니다.
   /// Swagger: https://ai.partition.site/docs

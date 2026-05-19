@@ -23,7 +23,7 @@ class HomeShareProvider extends ChangeNotifier {
   bool _isEnabled = false;
   bool _isNearHome = false;
   bool _roommateNearHome = false;
-  List<String> _nearHomeRoommateNames = const [];
+  List<RoommateNearHomeStatus> _nearHomeRoommates = const [];
   bool _isLoading = false;
 
   ({double lat, double lng, double radius})? _homeLocation;
@@ -56,12 +56,15 @@ class HomeShareProvider extends ChangeNotifier {
   bool get isNearHome => _isNearHome;
   /// 다른 룸메이트의 집 근처 진입 여부 (FCM·서버 조회)
   bool get roommateNearHome => _roommateNearHome;
+  /// 집 근처에 있는 룸메이트 (본인 제외)
+  List<RoommateNearHomeStatus> get nearHomeRoommates => _nearHomeRoommates;
   /// 집 근처에 있는 룸메이트 이름 (본인 제외)
-  List<String> get nearHomeRoommateNames => _nearHomeRoommateNames;
-  String get roommateNearHomeBannerText {
-    if (!_roommateNearHome) return '룸메이트가 집 근처에 없어요.';
-    if (_nearHomeRoommateNames.isEmpty) return '룸메이트가 집 근처에 있어요.';
-    return '${_nearHomeRoommateNames.join(', ')}님이 집 근처에 있어요.';
+  List<String> get nearHomeRoommateNames =>
+      _nearHomeRoommates.map((r) => r.name).where((n) => n.isNotEmpty).toList();
+
+  String roommateNearHomeBannerText(RoommateNearHomeStatus roommate) {
+    if (roommate.name.isEmpty) return '룸메이트가 집 근처에 있어요.';
+    return '${roommate.name}님이 집 근처에 있어요.';
   }
   bool get isLoading => _isLoading;
   ({double lat, double lng, double radius})? get homeLocation => _homeLocation;
@@ -214,10 +217,11 @@ class HomeShareProvider extends ChangeNotifier {
         if (!s.isNearHome) return false;
         if (myId != null && myId > 0 && s.userId == myId) return false;
         return true;
-      }).toList();
+      }).toList()
+        ..sort((a, b) => a.userId.compareTo(b.userId));
       _setRoommateNearHomeFromServer(
         near: nearOthers.isNotEmpty,
-        names: nearOthers.map((s) => s.name).where((n) => n.isNotEmpty).toList(),
+        roommates: nearOthers,
       );
     } on ApiException catch (e) {
       debugPrint('[HomeShare] 룸메이트 귀가 현황 조회 실패: $e');
@@ -234,13 +238,13 @@ class HomeShareProvider extends ChangeNotifier {
 
   void _setRoommateNearHomeFromServer({
     required bool near,
-    required List<String> names,
+    required List<RoommateNearHomeStatus> roommates,
   }) {
-    final namesChanged = !_listEquals(_nearHomeRoommateNames, names);
-    if (_roommateNearHome == near && !namesChanged) return;
+    final roommatesChanged = !_roommatesEqual(_nearHomeRoommates, roommates);
+    if (_roommateNearHome == near && !roommatesChanged) return;
 
     _roommateNearHome = near;
-    _nearHomeRoommateNames = List.unmodifiable(names);
+    _nearHomeRoommates = List.unmodifiable(roommates);
 
     if (near) {
       unawaited(StorageService.setRoommateNearHomeAt(DateTime.now()));
@@ -251,16 +255,45 @@ class HomeShareProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool _listEquals(List<String> a, List<String> b) {
+  bool _roommatesEqual(
+    List<RoommateNearHomeStatus> a,
+    List<RoommateNearHomeStatus> b,
+  ) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
+      if (a[i].userId != b[i].userId || a[i].name != b[i].name) return false;
     }
     return true;
   }
 
+  void _mergeNearHomeRoommate({
+    required int userId,
+    String? name,
+  }) {
+    final merged = List<RoommateNearHomeStatus>.from(_nearHomeRoommates);
+    final index = merged.indexWhere((r) => r.userId == userId);
+    final resolvedName = (name != null && name.isNotEmpty)
+        ? name
+        : (index >= 0 ? merged[index].name : '');
+    final entry = RoommateNearHomeStatus(
+      userId: userId,
+      name: resolvedName,
+      isNearHome: true,
+    );
+    if (index >= 0) {
+      merged[index] = entry;
+    } else {
+      merged.add(entry);
+    }
+    merged.sort((a, b) => a.userId.compareTo(b.userId));
+    _nearHomeRoommates = List.unmodifiable(merged);
+  }
+
   /// FCM `NEAR_HOME_ARRIVAL` 수신 시 알림 패널 상단 배너를 갱신합니다.
-  void applyRoommateNearHomeEvent() {
+  void applyRoommateNearHomeEvent({String? senderName, int? senderUserId}) {
+    if (senderUserId != null && senderUserId > 0) {
+      _mergeNearHomeRoommate(userId: senderUserId, name: senderName);
+    }
     _roommateNearHome = true;
     unawaited(StorageService.setRoommateNearHomeAt(DateTime.now()));
     _scheduleRoommateNearHomeExpiry();
@@ -447,12 +480,11 @@ class HomeShareProvider extends ChangeNotifier {
     _roommateNearHomeExpiryTimer?.cancel();
     final wait = remaining ?? _roommateNearHomeTtl;
     if (wait <= Duration.zero) {
-      _roommateNearHome = false;
+      unawaited(refreshRoommateNearHomeFromServer());
       return;
     }
     _roommateNearHomeExpiryTimer = Timer(wait, () {
-      _roommateNearHome = false;
-      notifyListeners();
+      unawaited(refreshRoommateNearHomeFromServer());
     });
   }
 

@@ -7,6 +7,8 @@ import 'package:partition_app/features/partition/models/reservation_item_model.d
 import 'package:partition_app/features/partition/models/reservation_booking_model.dart';
 import 'package:partition_app/features/partition/services/reservation_items_service.dart';
 import 'package:partition_app/features/partition/services/reservations_service.dart';
+import 'package:partition_app/features/partition/widgets/reservation_edit_dialog.dart';
+import 'package:partition_app/features/partition/widgets/reservation_item_detail_sheet.dart';
 import 'package:partition_app/shared/widgets/frosted_panel.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_date_picker.dart';
 import 'package:partition_app/shared/widgets/glassmorphic_time_picker.dart';
@@ -30,6 +32,8 @@ class _BoardReservationRow {
   /// 실제 시작·종료 시각(카운트다운용). 없으면 [end] 문자열만 표시.
   final DateTime? slotStart;
   final DateTime? slotEnd;
+  /// `GET /reservations` `reservedBy.userId` — 본인 예약 완료 API 판별용
+  final int? reservedByUserId;
 
   const _BoardReservationRow(
     this.content,
@@ -42,6 +46,7 @@ class _BoardReservationRow {
     this.reservationId,
     this.slotStart,
     this.slotEnd,
+    this.reservedByUserId,
   });
 }
 
@@ -64,6 +69,8 @@ class _ReservationFormDialogOutcome {
 
 
 const Duration _kMaxReservationDuration = Duration(hours: 5);
+/// 예약 시작일: 오늘(현재 시각 이후) ~ 14일 후까지
+const int _kMaxReservationAdvanceDays = 14;
 
 List<List<T>> _paginateRows<T>(List<T> items, int pageSize) {
   if (items.isEmpty) {
@@ -112,14 +119,15 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
   bool _reservationSelectionMode = false;
   final Set<int> _selectedReservationIndices = <int>{};
   Timer? _reservationEndCountdownTimer;
+  bool _autoCompleteInFlight = false;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // 예약 기간: 오늘 포함 최근 7일 (이전 6일 + 오늘)
-    _endDate = today;
+    // 예약 목록 조회: 최근 7일 + 향후 2주
+    _endDate = today.add(const Duration(days: _kMaxReservationAdvanceDays));
     _startDate = today.subtract(const Duration(days: 6));
     _reservationEndCountdownTimer = Timer.periodic(
       const Duration(seconds: 30),
@@ -205,7 +213,7 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
   }
 
   String _displayEndColumn(_BoardReservationRow r) {
-    if (r.completed) return r.end;
+    if (_isReservationCompleted(r)) return r.end;
     final start = r.slotStart;
     final end = r.slotEnd;
     if (start == null || end == null) return r.end;
@@ -219,7 +227,7 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
   bool _needsReservationEndColumnTick() {
     final now = DateTime.now();
     for (final r in _reservationRows) {
-      if (r.completed) continue;
+      if (_isReservationCompleted(r)) continue;
       final e = r.slotEnd;
       if (e == null) continue;
       if (now.isBefore(e)) return true;
@@ -229,8 +237,35 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
 
   void _onReservationEndCountdownTick(Timer timer) {
     if (!mounted) return;
-    if (!_needsReservationEndColumnTick()) return;
+    if (_needsReservationAutoCompleteTick()) {
+      unawaited(_autoCompleteElapsedReservations());
+    }
+    if (!_needsReservationEndColumnTick() &&
+        !_needsReservationAutoCompleteTick()) {
+      return;
+    }
     setState(() {});
+  }
+
+  int? _currentUserId() {
+    final raw = context.read<AuthProvider>().user?.id;
+    if (raw == null || raw.isEmpty) return null;
+    return int.tryParse(raw);
+  }
+
+  bool _isOwnReservation(_BoardReservationRow r) {
+    final uid = _currentUserId();
+    final owner = r.reservedByUserId;
+    if (uid == null || uid <= 0 || owner == null || owner <= 0) return false;
+    return uid == owner;
+  }
+
+  /// UI 표시용(서버 완료 또는 종료 시각 경과)
+  bool _isReservationCompleted(_BoardReservationRow r) {
+    if (r.completed) return true;
+    final end = r.slotEnd;
+    if (end == null) return false;
+    return !DateTime.now().isBefore(end);
   }
 
   _BoardReservationRow _rowFromReservationEntry(ReservationListEntry e) {
@@ -239,10 +274,94 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
       _formatReservationTableCell(e.startTime),
       _formatReservationTableCell(e.endTime),
       (e.reservedBy?.name ?? '').trim().isEmpty ? '—' : e.reservedBy!.name,
+      completed: e.isCompleted,
+      itemId: e.itemId,
       reservationId: e.reservationId,
       slotStart: e.startTime,
       slotEnd: e.endTime,
+      reservedByUserId: e.reservedBy?.userId,
     );
+  }
+
+  Future<void> _completeReservationOnServer(int reservationId) async {
+    try {
+      await ReservationsService().completeReservation(reservationId);
+    } on ApiException catch (e) {
+      if (e.code == 'RESERVATION_2013' || e.code == 'RESERVATION_2012') {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _autoCompleteElapsedReservations() async {
+    if (_autoCompleteInFlight || !mounted) return;
+    final useDummy = usePartitionDummyData(
+      Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+    );
+
+    final elapsedIndices = <int>[];
+    final ownElapsedIds = <int>{};
+    for (var i = 0; i < _reservationRows.length; i++) {
+      final r = _reservationRows[i];
+      if (r.isCatalogRow || r.completed) continue;
+      final end = r.slotEnd;
+      if (end == null || DateTime.now().isBefore(end)) continue;
+      elapsedIndices.add(i);
+      if (_isOwnReservation(r)) {
+        final id = r.reservationId;
+        if (id != null && id > 0) ownElapsedIds.add(id);
+      }
+    }
+    if (elapsedIndices.isEmpty) return;
+
+    if (useDummy) {
+      setState(() {
+        final next = List<_BoardReservationRow>.from(_reservationRows);
+        for (final i in elapsedIndices) {
+          final r = next[i];
+          next[i] = _BoardReservationRow(
+            r.content,
+            r.start,
+            r.end,
+            r.person,
+            completed: true,
+            itemId: r.itemId,
+            isCatalogRow: r.isCatalogRow,
+            reservationId: r.reservationId,
+            slotStart: r.slotStart,
+            slotEnd: r.slotEnd,
+            reservedByUserId: r.reservedByUserId,
+          );
+        }
+        _reservationRows = next;
+      });
+      return;
+    }
+
+    if (ownElapsedIds.isEmpty) return;
+
+    _autoCompleteInFlight = true;
+    try {
+      for (final id in ownElapsedIds) {
+        await _completeReservationOnServer(id);
+      }
+      if (mounted) await _loadReservationsListOnly();
+    } catch (_) {
+      // 자동 완료 실패 시 다음 주기·수동 완료에 맡김
+    } finally {
+      _autoCompleteInFlight = false;
+    }
+  }
+
+  bool _needsReservationAutoCompleteTick() {
+    final now = DateTime.now();
+    for (final r in _reservationRows) {
+      if (r.isCatalogRow || r.completed || !_isOwnReservation(r)) continue;
+      final end = r.slotEnd;
+      if (end != null && !now.isBefore(end)) return true;
+    }
+    return false;
   }
 
   /// 예약 대상(items) + 기간 내 예약 목록(`GET /reservations`) 동시 갱신
@@ -276,6 +395,7 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
         _clampPageIndex();
       });
       _schedulePageJump();
+      await _autoCompleteElapsedReservations();
     } catch (e) {
       if (!mounted) return;
       final msg = e is ApiException ? e.message : '예약 정보를 불러오지 못했습니다.';
@@ -303,6 +423,7 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
         _clampPageIndex();
       });
       _schedulePageJump();
+      await _autoCompleteElapsedReservations();
     } catch (e) {
       if (!mounted) return;
       final msg = e is ApiException ? e.message : '예약 목록을 불러오지 못했습니다.';
@@ -827,13 +948,17 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     const padTime = 4.0;
     const padPerson = 4.0;
 
-    final rowStyle = r.completed
+    final done = _isReservationCompleted(r);
+    final rowStyle = done
         ? _cellStyle.copyWith(
             color: Colors.white.withOpacity(0.42),
             decoration: TextDecoration.lineThrough,
             decorationColor: Colors.white54,
           )
         : _cellStyle;
+
+    final canOpenDetail =
+        !selectionMode && !r.isCatalogRow && r.reservationId != null;
 
     Widget fittedCell(String text) {
       return Center(
@@ -896,12 +1021,29 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
             flex: 3,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: padContent),
-              child: Text(
-                r.content,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: rowStyle,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: canOpenDetail
+                      ? () => _showReservationDetailSheet(r)
+                      : null,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      r.content,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: rowStyle.copyWith(
+                        decoration: canOpenDetail && !done
+                            ? TextDecoration.underline
+                            : rowStyle.decoration,
+                        decorationColor: Colors.white38,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1224,15 +1366,27 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     }
 
     final ids = <int>{};
+    var skippedOthers = 0;
     for (final i in _selectedReservationIndices) {
       if (i < 0 || i >= _reservationRows.length) continue;
-      final id = _reservationRows[i].reservationId;
-      if (id != null) ids.add(id);
+      final r = _reservationRows[i];
+      if (!_isOwnReservation(r)) {
+        skippedOthers++;
+        continue;
+      }
+      final id = r.reservationId;
+      if (id != null && id > 0) ids.add(id);
     }
     if (ids.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('삭제할 서버 예약이 선택되지 않았습니다.')),
+        SnackBar(
+          content: Text(
+            skippedOthers > 0
+                ? '본인의 예약만 삭제할 수 있습니다.'
+                : '삭제할 서버 예약이 선택되지 않았습니다.',
+          ),
+        ),
       );
       return;
     }
@@ -1253,12 +1407,13 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     });
     await _loadReservationsListOnly();
     if (!mounted) return;
+    final suffix = skippedOthers > 0 ? ' (타인 예약 $skippedOthers건 제외)' : '';
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${ids.length}개 예약을 삭제했습니다.')),
+      SnackBar(content: Text('${ids.length}개 예약을 삭제했습니다.$suffix')),
     );
   }
 
-  void _markSelectedReservationsCompleted() {
+  Future<void> _markSelectedReservationsCompleted() async {
     if (_selectedReservationIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('먼저 항목을 선택해주세요.')),
@@ -1268,8 +1423,9 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
     final useDummy = usePartitionDummyData(
       Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
     );
-    setState(() {
-      if (useDummy) {
+
+    if (useDummy) {
+      setState(() {
         final next = List<_BoardReservationRow>.from(_reservationRows);
         for (final i in _selectedReservationIndices) {
           if (i >= 0 && i < next.length) {
@@ -1285,35 +1441,236 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
               reservationId: r.reservationId,
               slotStart: r.slotStart,
               slotEnd: r.slotEnd,
+              reservedByUserId: r.reservedByUserId,
             );
           }
         }
         _reservationRows = next;
-      } else {
-        final next = List<_BoardReservationRow>.from(_reservationRows);
-        for (final i in _selectedReservationIndices) {
-          if (i < 0 || i >= next.length) continue;
-          final r = next[i];
-          next[i] = _BoardReservationRow(
-            r.content,
-            r.start,
-            r.end,
-            r.person,
-            completed: true,
-            itemId: r.itemId,
-            isCatalogRow: r.isCatalogRow,
-            reservationId: r.reservationId,
-            slotStart: r.slotStart,
-            slotEnd: r.slotEnd,
-          );
-        }
-        _reservationRows = next;
+        _reservationSelectionMode = false;
+        _selectedReservationIndices.clear();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('선택한 예약을 이용완료로 표시했습니다.')),
+        );
       }
+      return;
+    }
+
+    final ids = <int>{};
+    var skippedOthers = 0;
+    for (final i in _selectedReservationIndices) {
+      if (i < 0 || i >= _reservationRows.length) continue;
+      final r = _reservationRows[i];
+      if (!_isOwnReservation(r)) {
+        skippedOthers++;
+        continue;
+      }
+      final id = r.reservationId;
+      if (id != null && id > 0) ids.add(id);
+    }
+    if (ids.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            skippedOthers > 0
+                ? '본인의 예약만 완료 처리할 수 있습니다.'
+                : '완료 처리할 서버 예약이 선택되지 않았습니다.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      for (final id in ids) {
+        await _completeReservationOnServer(id);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final msg =
+          e is ApiException ? e.message : '예약 완료 처리에 실패했습니다.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
       _reservationSelectionMode = false;
       _selectedReservationIndices.clear();
     });
+    await _loadReservationsListOnly();
+    if (!mounted) return;
+    final suffix = skippedOthers > 0 ? ' (타인 예약 $skippedOthers건 제외)' : '';
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('선택한 예약을 이용완료로 표시했습니다.')),
+      SnackBar(content: Text('${ids.length}개 예약을 이용완료 처리했습니다.$suffix')),
+    );
+  }
+
+  Future<void> _deleteReservationById(int reservationId) async {
+    await ReservationsService().deleteReservations([reservationId]);
+    if (!mounted) return;
+    await _loadReservationsListOnly();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('예약을 삭제했습니다.')),
+    );
+  }
+
+  String _formatTableCell(DateTime d) {
+    return '${d.month}.${d.day} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  List<ReservationItem> _reservationItemsFromCatalog() {
+    return _catalogFromApi
+        .where((e) => e.itemId != null && e.itemId! > 0)
+        .map((e) => ReservationItem(itemId: e.itemId!, name: e.content))
+        .toList();
+  }
+
+  Future<void> _showReservationEditDialog(_BoardReservationRow r) async {
+    final id = r.reservationId;
+    if (id == null || r.isCatalogRow) return;
+    final start = r.slotStart;
+    final end = r.slotEnd;
+    if (start == null || end == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('수정할 예약 시간 정보가 없습니다.')),
+      );
+      return;
+    }
+
+    final useDummy = usePartitionDummyData(
+      Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+    );
+
+    final updated = await showReservationEditDialog(
+      context: context,
+      reservationId: id,
+      initialItemId: r.itemId ?? 0,
+      initialStart: start,
+      initialEnd: end,
+      useDummyData: useDummy,
+      initialItems: useDummy ? _reservationItemsFromCatalog() : null,
+      onOpenReservationItemManage:
+          useDummy ? null : _showReservationItemManageDialog,
+    );
+
+    if (updated == null || !mounted) return;
+
+    if (useDummy) {
+      setState(() {
+        final idx = _reservationRows.indexWhere((e) => e.reservationId == id);
+        if (idx < 0) return;
+        final row = _reservationRows[idx];
+        _reservationRows = List<_BoardReservationRow>.from(_reservationRows)
+          ..[idx] = _BoardReservationRow(
+            updated.itemName,
+            _formatTableCell(updated.startTime),
+            _formatTableCell(updated.endTime),
+            row.person,
+            completed: row.completed,
+            itemId: updated.itemId,
+            reservationId: row.reservationId,
+            slotStart: updated.startTime,
+            slotEnd: updated.endTime,
+            reservedByUserId: row.reservedByUserId,
+          );
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('예약이 수정되었습니다.')),
+        );
+      }
+      return;
+    }
+
+    await _loadReservationsListOnly();
+  }
+
+  void _showReservationDetailSheet(_BoardReservationRow r) {
+    final id = r.reservationId;
+    if (id == null || r.isCatalogRow) return;
+
+    final useDummy = usePartitionDummyData(
+      Provider.of<AuthProvider>(context, listen: false).isAuthenticated,
+    );
+    final own = useDummy || _isOwnReservation(r);
+    final canComplete = own && !_isReservationCompleted(r);
+    final canEdit = own && !r.completed && r.slotStart != null && r.slotEnd != null;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.35),
+      builder: (ctx) => ReservationItemDetailSheet(
+        key: ValueKey('res_${id}_${_isReservationCompleted(r)}'),
+        itemName: r.content,
+        startLabel: r.start,
+        endLabel: r.end,
+        reserverName: r.person,
+        completed: _isReservationCompleted(r),
+        canManageCompletion: own,
+        onMarkCompleted: canComplete
+            ? () async {
+                if (useDummy) {
+                  if (!mounted) return;
+                  setState(() {
+                    final idx = _reservationRows.indexWhere(
+                      (e) => e.reservationId == id,
+                    );
+                    if (idx < 0) return;
+                    final row = _reservationRows[idx];
+                    final next = List<_BoardReservationRow>.from(
+                      _reservationRows,
+                    );
+                    next[idx] = _BoardReservationRow(
+                      row.content,
+                      row.start,
+                      row.end,
+                      row.person,
+                      completed: true,
+                      itemId: row.itemId,
+                      reservationId: row.reservationId,
+                      slotStart: row.slotStart,
+                      slotEnd: row.slotEnd,
+                      reservedByUserId: row.reservedByUserId,
+                    );
+                    _reservationRows = next;
+                  });
+                  return;
+                }
+                await _completeReservationOnServer(id);
+                if (!mounted) return;
+                await _loadReservationsListOnly();
+              }
+            : null,
+        onEditRequested: canEdit ? () => _showReservationEditDialog(r) : null,
+        onDeleteRequested: own
+            ? () async {
+          if (useDummy) {
+            if (!mounted) return;
+            setState(() {
+              _reservationRows = _reservationRows
+                  .where((e) => e.reservationId != id)
+                  .toList();
+              _clampPageIndex();
+            });
+            _schedulePageJump();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('예약을 삭제했습니다.')),
+              );
+            }
+            return;
+          }
+          await _deleteReservationById(id);
+        }
+            : null,
+      ),
     );
   }
 
@@ -1507,17 +1864,30 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     return '${d.month}.${d.day} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
+  DateTime get _earliestBookableTime {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, now.hour, now.minute);
+  }
+
+  DateTime get _latestBookableTime {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastDay = today.add(const Duration(days: _kMaxReservationAdvanceDays));
+    return DateTime(lastDay.year, lastDay.month, lastDay.day, 23, 59);
+  }
+
+  bool _isWithinBookableRange(DateTime dt) {
+    return !dt.isBefore(_earliestBookableTime) && !dt.isAfter(_latestBookableTime);
+  }
+
   Future<DateTime?> _pickDateTime(
     DateTime initial, {
     DateTime? minDateTime,
     DateTime? maxDateTime,
   }) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final defaultMaxDate = today.add(const Duration(days: 365));
     var init = initial;
-    final floor = minDateTime ?? today;
-    final ceiling = maxDateTime ?? defaultMaxDate;
+    final floor = minDateTime ?? _earliestBookableTime;
+    final ceiling = maxDateTime ?? _latestBookableTime;
     if (init.isBefore(floor)) init = floor;
     if (init.isAfter(ceiling)) init = ceiling;
 
@@ -1573,9 +1943,14 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
 
   DateTime get _maxEndTime => _start.add(_kMaxReservationDuration);
 
+  DateTime get _cappedMaxEndTime {
+    final raw = _maxEndTime;
+    return raw.isAfter(_latestBookableTime) ? _latestBookableTime : raw;
+  }
+
   DateTime _clampEndTime(DateTime end) {
     if (end.isBefore(_minEndTime)) return _minEndTime;
-    if (end.isAfter(_maxEndTime)) return _maxEndTime;
+    if (end.isAfter(_cappedMaxEndTime)) return _cappedMaxEndTime;
     return end;
   }
 
@@ -1587,7 +1962,11 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   }
 
   Future<void> _pickStart() async {
-    final d = await _pickDateTime(_start);
+    final d = await _pickDateTime(
+      _start,
+      minDateTime: _earliestBookableTime,
+      maxDateTime: _latestBookableTime,
+    );
     if (d != null) {
       setState(() {
         _start = d;
@@ -1603,7 +1982,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     final d = await _pickDateTime(
       base,
       minDateTime: _minEndTime,
-      maxDateTime: _maxEndTime,
+      maxDateTime: _cappedMaxEndTime,
     );
     if (d != null) {
       final clamped = _clampEndTime(d);
@@ -1619,16 +1998,28 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   }
 
   Future<void> _submit() async {
+    if (!_isWithinBookableRange(_start)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('예약은 오늘부터 2주 이내 날짜·시간만 선택할 수 있습니다.'),
+        ),
+      );
+      return;
+    }
     if (!_end.isAfter(_start)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('종료 시간이 시작 시간보다 이후여야 합니다.')),
       );
       return;
     }
-    if (_end.isAfter(_maxEndTime)) {
+    if (_end.isAfter(_cappedMaxEndTime)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('종료 시간은 시작 시간으로부터 5시간 이내여야 합니다.'),
+        SnackBar(
+          content: Text(
+            _cappedMaxEndTime == _maxEndTime
+                ? '종료 시간은 시작 시간으로부터 5시간 이내여야 합니다.'
+                : '예약은 오늘부터 2주 이내 날짜·시간만 선택할 수 있습니다.',
+          ),
         ),
       );
       return;
@@ -1680,6 +2071,27 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
 
     setState(() => _submitting = true);
     try {
+      try {
+        final conflict = await _reservationsService.hasConflictingReservation(
+          itemId: match.itemId,
+          itemName: match.name,
+          startTime: _start,
+          endTime: _end,
+        );
+        if (!mounted) return;
+        if (conflict) {
+          setState(() => _submitting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(ReservationsService.conflictErrorMessage),
+            ),
+          );
+          return;
+        }
+      } catch (_) {
+        // 목록 조회 실패 시 서버 검증(409 등)에 맡김
+      }
+
       await _reservationsService.createReservation(
         itemId: match.itemId,
         startTime: _start,
@@ -1752,7 +2164,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '예약할 대상과 시간을 설정하세요.',
+                    '예약할 대상과 시간을 설정하세요.\n(오늘부터 2주 이내)',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.72),
