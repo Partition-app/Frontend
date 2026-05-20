@@ -1178,6 +1178,32 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     }
     if (_choreToggleInProgress.contains(choreId)) return;
     setState(() => _choreToggleInProgress.add(choreId));
+
+    final dateKey = _dateKey(date);
+    void applyLocal(bool value) {
+      if (!mounted) return;
+      setState(() {
+        final items = _cachedDailyEvents?[dateKey];
+        if (items == null) return;
+        _cachedDailyEvents![dateKey] = items.map((item) {
+          if (item.id == choreId &&
+              _normalizeDailyCategory(item.category) == 'CHORE') {
+            return DailyCalendarItem(
+              category: item.category,
+              id: item.id,
+              title: item.title,
+              assigneeName: item.assigneeName,
+              assigneeId: item.assigneeId,
+              choreType: item.choreType,
+              isCompleted: value,
+              isOwner: item.isOwner,
+            );
+          }
+          return item;
+        }).toList();
+      });
+    }
+
     try {
       final response = await _choreService.updateChoreCompletion(
         choreId: choreId,
@@ -1191,30 +1217,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
               : '집안일 완료 처리에 실패했어요.',
         );
       }
-      final dateKey = _dateKey(date);
-      if (mounted) {
-        setState(() {
-          final items = _cachedDailyEvents?[dateKey];
-          if (items != null) {
-            _cachedDailyEvents![dateKey] = items.map((item) {
-              if (item.id == choreId &&
-                  _normalizeDailyCategory(item.category) == 'CHORE') {
-                return DailyCalendarItem(
-                  category: item.category,
-                  id: item.id,
-                  title: item.title,
-                  assigneeName: item.assigneeName,
-                  assigneeId: item.assigneeId,
-                  choreType: item.choreType,
-                  isCompleted: completed,
-                  isOwner: item.isOwner,
-                );
-              }
-              return item;
-            }).toList();
-          }
-        });
-      }
+      applyLocal(completed);
       await _loadDailyCalendarData(date, forceRefresh: true);
       if (!mounted) return;
       await _loadCalendarData(
@@ -1224,12 +1227,32 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
       );
     } catch (e) {
       if (!mounted) return;
+
+      // PATCH `/chores/{choreId}/complete` 명세 에러 코드별 안내
+      String? friendlyMessage;
+      if (e is ApiException) {
+        switch (e.code) {
+          case 'CHORE_1001':
+            friendlyMessage = '존재하지 않는 집안일이에요.';
+            break;
+          case 'CHORE_1002':
+            friendlyMessage = '본인에게 배정된 집안일만 완료 처리할 수 있어요.';
+            break;
+          case 'CHORE_1003':
+            // 이미 완료된 상태 → 로컬 상태를 서버와 동기화
+            friendlyMessage = '이미 완료된 집안일이에요.';
+            applyLocal(true);
+            break;
+        }
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            e is ApiException
-                ? e.message
-                : (e is Exception ? e.toString() : '집안일 완료 처리에 실패했어요.'),
+            friendlyMessage ??
+                (e is ApiException
+                    ? e.message
+                    : (e is Exception ? e.toString() : '집안일 완료 처리에 실패했어요.')),
           ),
           duration: const Duration(seconds: 2),
         ),
@@ -2195,31 +2218,14 @@ class _EventChip extends StatelessWidget {
                   ),
               ],
               if (showChoreCheckbox) ...[
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: Checkbox(
-                    value: event.isCompleted ?? false,
-                    onChanged: !canToggleChore || choreCheckboxBusy
-                        ? null
-                        : (v) {
-                            if (v != null) onChoreCompleted!(v);
-                          },
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                    side: BorderSide(
-                      color: Colors.white.withOpacity(0.5),
-                      width: 1.1,
-                    ),
-                    fillColor: MaterialStateProperty.resolveWith((states) {
-                      if (states.contains(MaterialState.selected)) {
-                        return Colors.white.withOpacity(0.20);
-                      }
-                      return Colors.white.withOpacity(0.06);
-                    }),
-                    checkColor: Colors.white,
-                  ),
+                const SizedBox(width: 8),
+                _ChoreCompletionCheckbox(
+                  isCompleted: event.isCompleted ?? false,
+                  enabled: canToggleChore && !choreCheckboxBusy,
+                  busy: choreCheckboxBusy,
+                  onTap: !canToggleChore || choreCheckboxBusy
+                      ? null
+                      : () => onChoreCompleted!(!(event.isCompleted ?? false)),
                 ),
               ],
             ],
@@ -2238,6 +2244,83 @@ class _EventChip extends StatelessWidget {
       case CalendarEventType.memo:
         return const Color(0xFF7C7C7C); // 메모
     }
+  }
+}
+
+/// 집안일 완료 체크박스 — 글래스 배경 위에서도 항상 또렷이 보이도록 커스텀 렌더링.
+/// 본인 담당이 아닐 때(enabled=false)는 클릭이 비활성화되지만, 완료 상태는 그대로 표시.
+class _ChoreCompletionCheckbox extends StatelessWidget {
+  final bool isCompleted;
+  final bool enabled;
+  final bool busy;
+  final VoidCallback? onTap;
+
+  const _ChoreCompletionCheckbox({
+    required this.isCompleted,
+    required this.enabled,
+    required this.busy,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const double size = 22;
+    final Color borderColor = isCompleted
+        ? const Color(0xFFDBD1C2)
+        : Colors.white.withOpacity(enabled ? 0.85 : 0.55);
+    final Color fillColor = isCompleted
+        ? const Color(0xFFDBD1C2)
+        : Colors.white.withOpacity(enabled ? 0.18 : 0.10);
+    final Color checkColor = isCompleted
+        ? const Color(0xFF1B1B1B)
+        : Colors.transparent;
+
+    final Widget box = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: fillColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderColor, width: 1.4),
+        boxShadow: isCompleted
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFDBD1C2).withOpacity(0.45),
+                  blurRadius: 6,
+                  spreadRadius: 0.5,
+                ),
+              ]
+            : null,
+      ),
+      alignment: Alignment.center,
+      child: busy
+          ? const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.6,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+          : (isCompleted
+              ? Icon(Icons.check, size: 16, color: checkColor)
+              : const SizedBox.shrink()),
+    );
+
+    return Semantics(
+      label: '집안일 완료',
+      checked: isCompleted,
+      enabled: enabled,
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+          child: box,
+        ),
+      ),
+    );
   }
 }
 
