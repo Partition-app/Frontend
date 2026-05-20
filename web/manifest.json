@@ -1,6 +1,6 @@
 {
-    "name": "partition_app",
-    "short_name": "partition_app",
+    "name": "파티션",
+    "short_name": "파티션",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#26394B",

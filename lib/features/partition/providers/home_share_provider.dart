@@ -18,12 +18,17 @@ class HomeShareProvider extends ChangeNotifier {
   static const Duration _cooldown = Duration(minutes: 30);
   static const Duration _roommateNearHomeTtl = Duration(minutes: 30);
   static const Duration _roommateNearHomePollInterval = Duration(seconds: 60);
+  /// 집에 머무는 동안 주기적으로 POST를 재시도하는 체크 간격.
+  static const Duration _atHomeRefreshInterval = Duration(minutes: 5);
+  /// 마지막 전송 이후 이 시간이 지나면 서버 쿨다운(30분)이 끝났다고 보고 재전송.
+  static const Duration _atHomeRefreshThreshold = Duration(minutes: 28);
   static const double _defaultRadius = 300.0;
 
   bool _isEnabled = false;
   bool _isNearHome = false;
   bool _roommateNearHome = false;
   List<RoommateNearHomeStatus> _nearHomeRoommates = const [];
+  List<RoommateNearHomeStatus> _allRoommateStatuses = const [];
   bool _isLoading = false;
 
   ({double lat, double lng, double radius})? _homeLocation;
@@ -32,6 +37,8 @@ class HomeShareProvider extends ChangeNotifier {
   StreamSubscription<Position>? _positionSub;
   Timer? _roommateNearHomeExpiryTimer;
   Timer? _roommateNearHomePollTimer;
+  /// 집에 머무는 동안 주기적으로 서버에 `entered_home_area`를 다시 보내는 타이머.
+  Timer? _atHomeRefreshTimer;
   Future<void>? _ongoingInitialize;
 
   final HomeShareService _service = HomeShareService();
@@ -58,13 +65,22 @@ class HomeShareProvider extends ChangeNotifier {
   bool get roommateNearHome => _roommateNearHome;
   /// 집 근처에 있는 룸메이트 (본인 제외)
   List<RoommateNearHomeStatus> get nearHomeRoommates => _nearHomeRoommates;
+  /// 본인 제외 전체 룸메이트 상태 (isNearHome 여부 포함)
+  List<RoommateNearHomeStatus> get allRoommateStatuses => _allRoommateStatuses;
   /// 집 근처에 있는 룸메이트 이름 (본인 제외)
   List<String> get nearHomeRoommateNames =>
       _nearHomeRoommates.map((r) => r.name).where((n) => n.isNotEmpty).toList();
 
   String roommateNearHomeBannerText(RoommateNearHomeStatus roommate) {
-    if (roommate.name.isEmpty) return '룸메이트가 집 근처에 있어요.';
-    return '${roommate.name}님이 집 근처에 있어요.';
+    final name = roommate.name;
+    if (name.isEmpty) {
+      return roommate.isNearHome
+          ? '룸메이트가 집 근처에 있어요.'
+          : '룸메이트가 집 근처에 없어요.';
+    }
+    return roommate.isNearHome
+        ? '$name 님이 집 근처에 있어요.'
+        : '$name 님이 집 근처에 없어요.';
   }
   bool get isLoading => _isLoading;
   ({double lat, double lng, double radius})? get homeLocation => _homeLocation;
@@ -111,8 +127,10 @@ class HomeShareProvider extends ChangeNotifier {
       }
     }
 
-    _restoreRoommateNearHomeFromStorage();
-    await refreshRoommateNearHomeFromServer();
+    final refreshed = await refreshRoommateNearHomeFromServer();
+    if (!refreshed) {
+      _restoreRoommateNearHomeFromStorage();
+    }
     _startRoommateNearHomePolling();
     notifyListeners();
   }
@@ -209,22 +227,27 @@ class HomeShareProvider extends ChangeNotifier {
       _ensureHomeLocationFromServer();
 
   /// GET `/households/location-events/near-home`으로 룸메이트 귀가 배너를 갱신합니다.
-  Future<void> refreshRoommateNearHomeFromServer() async {
+  /// 성공 시 [true], 네트워크·API 실패 시 [false] (로컬 캐시 폴백용).
+  Future<bool> refreshRoommateNearHomeFromServer() async {
     try {
       final statuses = await _service.fetchRoommateNearHomeStatus();
       final myId = int.tryParse(await StorageService.getUserId() ?? '');
-      final nearOthers = statuses.where((s) {
-        if (!s.isNearHome) return false;
+      final others = statuses.where((s) {
         if (myId != null && myId > 0 && s.userId == myId) return false;
         return true;
       }).toList()
         ..sort((a, b) => a.userId.compareTo(b.userId));
+      final nearOthers =
+          others.where((s) => s.isNearHome).toList(growable: false);
       _setRoommateNearHomeFromServer(
         near: nearOthers.isNotEmpty,
         roommates: nearOthers,
+        allRoommates: others,
       );
+      return true;
     } on ApiException catch (e) {
       debugPrint('[HomeShare] 룸메이트 귀가 현황 조회 실패: $e');
+      return false;
     }
   }
 
@@ -239,20 +262,44 @@ class HomeShareProvider extends ChangeNotifier {
   void _setRoommateNearHomeFromServer({
     required bool near,
     required List<RoommateNearHomeStatus> roommates,
+    required List<RoommateNearHomeStatus> allRoommates,
   }) {
     final roommatesChanged = !_roommatesEqual(_nearHomeRoommates, roommates);
-    if (_roommateNearHome == near && !roommatesChanged) return;
+    final allRoommatesChanged =
+        !_roommatesStatusEqual(_allRoommateStatuses, allRoommates);
+    if (_roommateNearHome == near &&
+        !roommatesChanged &&
+        !allRoommatesChanged) {
+      return;
+    }
 
     _roommateNearHome = near;
     _nearHomeRoommates = List.unmodifiable(roommates);
+    _allRoommateStatuses = List.unmodifiable(allRoommates);
 
     if (near) {
       unawaited(StorageService.setRoommateNearHomeAt(DateTime.now()));
       _scheduleRoommateNearHomeExpiry();
     } else {
       _roommateNearHomeExpiryTimer?.cancel();
+      unawaited(StorageService.clearRoommateNearHomeAt());
     }
     notifyListeners();
+  }
+
+  bool _roommatesStatusEqual(
+    List<RoommateNearHomeStatus> a,
+    List<RoommateNearHomeStatus> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].userId != b[i].userId ||
+          a[i].name != b[i].name ||
+          a[i].isNearHome != b[i].isNearHome) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool _roommatesEqual(
@@ -287,6 +334,17 @@ class HomeShareProvider extends ChangeNotifier {
     }
     merged.sort((a, b) => a.userId.compareTo(b.userId));
     _nearHomeRoommates = List.unmodifiable(merged);
+
+    final allMerged =
+        List<RoommateNearHomeStatus>.from(_allRoommateStatuses);
+    final allIndex = allMerged.indexWhere((r) => r.userId == userId);
+    if (allIndex >= 0) {
+      allMerged[allIndex] = entry;
+    } else {
+      allMerged.add(entry);
+    }
+    allMerged.sort((a, b) => a.userId.compareTo(b.userId));
+    _allRoommateStatuses = List.unmodifiable(allMerged);
   }
 
   /// FCM `NEAR_HOME_ARRIVAL` 수신 시 알림 패널 상단 배너를 갱신합니다.
@@ -322,7 +380,8 @@ class HomeShareProvider extends ChangeNotifier {
       await _startLocationWatch();
       _isEnabled = true;
       await StorageService.setSharingEnabled(true);
-      await _evaluateCurrentPosition();
+      // 토글 ON 시 위치가 집 안이면 클라이언트 쿨다운을 무시하고 강제 전송
+      await _evaluateCurrentPosition(force: true);
 
       try {
         await _service.saveLocationConsent(agreed: true);
@@ -341,6 +400,7 @@ class HomeShareProvider extends ChangeNotifier {
   /// 귀가 공유를 비활성화하고 위치 감시를 중단합니다.
   Future<void> disableSharing() async {
     _stopLocationWatch();
+    _stopAtHomeRefreshTimer();
     _isEnabled = false;
     _isNearHome = false;
     await StorageService.setSharingEnabled(false);
@@ -519,7 +579,8 @@ class HomeShareProvider extends ChangeNotifier {
   }
 
   /// 토글 ON·홈 재진입 시 이미 집 근처여도 알림이 가도록 현재 좌표를 한 번 평가합니다.
-  Future<void> _evaluateCurrentPosition() async {
+  /// [force]가 true이면 위치가 집 안일 때 클라이언트 쿨다운을 무시하고 POST를 전송합니다.
+  Future<void> _evaluateCurrentPosition({bool force = false}) async {
     if (!_isEnabled || _homeLocation == null) return;
     try {
       final granted = await _ensureLocationPermission();
@@ -530,7 +591,7 @@ class HomeShareProvider extends ChangeNotifier {
           accuracy: LocationAccuracy.medium,
         ),
       );
-      _onPosition(position);
+      _onPosition(position, force: force);
     } catch (e) {
       debugPrint('[HomeShare] 현재 위치 평가 실패: $e');
     }
@@ -541,7 +602,7 @@ class HomeShareProvider extends ChangeNotifier {
     _positionSub = null;
   }
 
-  void _onPosition(Position position) {
+  void _onPosition(Position position, {bool force = false}) {
     final home = _homeLocation;
     if (home == null) return;
 
@@ -554,20 +615,28 @@ class HomeShareProvider extends ChangeNotifier {
 
     final bool wasNear = _isNearHome;
     final bool isNear = dist <= home.radius;
-    if (isNear == wasNear) return;
+    final bool stateChanged = isNear != wasNear;
 
     _isNearHome = isNear;
 
-    // 집 반경에 처음 진입할 때만 알림 전송
     if (_isNearHome) {
-      _maybeNotify();
+      // 집 반경 진입 또는 강제 호출(토글 ON 등) 시 POST 전송
+      if (stateChanged || force) {
+        _maybeNotify(force: force);
+      }
+      _startAtHomeRefreshTimer();
+    } else {
+      _stopAtHomeRefreshTimer();
     }
 
-    notifyListeners();
+    if (stateChanged) {
+      notifyListeners();
+    }
   }
 
-  void _maybeNotify() {
-    if (_lastNotifiedAt != null &&
+  void _maybeNotify({bool force = false}) {
+    if (!force &&
+        _lastNotifiedAt != null &&
         DateTime.now().difference(_lastNotifiedAt!) < _cooldown) {
       return;
     }
@@ -579,10 +648,35 @@ class HomeShareProvider extends ChangeNotifier {
     });
   }
 
+  /// 집 안에 머무는 동안 서버 GET `isNearHome` 상태가 만료(30분)되지 않도록
+  /// 5분 간격으로 체크하고, 마지막 POST 후 28분이 지났으면 강제 재전송합니다.
+  void _startAtHomeRefreshTimer() {
+    if (_atHomeRefreshTimer != null && _atHomeRefreshTimer!.isActive) return;
+    _atHomeRefreshTimer = Timer.periodic(_atHomeRefreshInterval, (_) {
+      if (!_isEnabled || !_isNearHome || _homeLocation == null) {
+        _stopAtHomeRefreshTimer();
+        return;
+      }
+      final lastAt = _lastNotifiedAt;
+      // 서버 30분 쿨다운이 끝나기 직전(28분)부터만 재전송 — 불필요한 요청 최소화
+      if (lastAt != null &&
+          DateTime.now().difference(lastAt) < _atHomeRefreshThreshold) {
+        return;
+      }
+      _maybeNotify(force: true);
+    });
+  }
+
+  void _stopAtHomeRefreshTimer() {
+    _atHomeRefreshTimer?.cancel();
+    _atHomeRefreshTimer = null;
+  }
+
   @override
   void dispose() {
     _roommateNearHomeExpiryTimer?.cancel();
     _roommateNearHomePollTimer?.cancel();
+    _stopAtHomeRefreshTimer();
     _stopLocationWatch();
     super.dispose();
   }

@@ -27,6 +27,7 @@ class PartitionHomeSettingsModal extends StatefulWidget {
 class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal> {
   final AuthService _authService = AuthService();
   HouseholdResponseModel? _household;
+  int? _currentUserId;
   bool _loading = true;
 
   static const Color _destructiveMuted = Color(0xFFD88A94);
@@ -38,8 +39,13 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
 
   Future<void> _loadHousehold() async {
     setState(() => _loading = true);
-    final res = await _authService.fetchMyHousehold();
+    final results = await Future.wait([
+      _authService.fetchMyHousehold(),
+      _authService.getResolvedCurrentUserId(),
+    ]);
     if (!mounted) return;
+    final res = results[0] as HouseholdResponseModel?;
+    final uid = results[1] as int?;
     final role = res?.result?.role?.trim();
     if (role != null && role.isNotEmpty) {
       await StorageService.setUserRole(role);
@@ -47,9 +53,13 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
     if (!mounted) return;
     setState(() {
       _household = res;
+      _currentUserId = uid;
       _loading = false;
     });
   }
+
+  List<HouseholdMemberModel> get _members =>
+      _household?.result?.members ?? const <HouseholdMemberModel>[];
 
   bool get _isLeader {
     final r = _household?.result?.role?.trim().toUpperCase();
@@ -460,6 +470,201 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
     }
   }
 
+  Widget _buildMembersSection() {
+    final members = _members;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              Text(
+                '그룹원',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                members.isEmpty ? '' : '(${members.length}명)',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: PartitionUiTokens.surfaceFillSoft,
+            borderRadius:
+                BorderRadius.circular(PartitionUiTokens.fieldRadius),
+            border: Border.all(color: Colors.white.withOpacity(0.16)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: members.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 14),
+                  child: Text(
+                    '아직 표시할 그룹원이 없어요.',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 13,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    for (var i = 0; i < members.length; i++) ...[
+                      _memberRow(members[i]),
+                      if (i != members.length - 1)
+                        Divider(
+                          height: 1,
+                          thickness: 0.5,
+                          color: Colors.white.withOpacity(0.08),
+                          indent: 12,
+                          endIndent: 12,
+                        ),
+                    ],
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _memberRow(HouseholdMemberModel m) {
+    final role = (m.role ?? '').toUpperCase();
+    final isLeader = role == 'LEADER';
+    final isMe = _currentUserId != null && _currentUserId == m.userId;
+    final imageUrl = m.profileImage?.trim();
+    final hasImage = imageUrl != null &&
+        imageUrl.isNotEmpty &&
+        (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
+    final displayName = m.name.trim().isNotEmpty ? m.name.trim() : '이름 없음';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.12),
+              border: Border.all(color: Colors.white.withOpacity(0.18)),
+              image: hasImage
+                  ? DecorationImage(
+                      image: NetworkImage(imageUrl),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: hasImage
+                ? null
+                : Text(
+                    displayName.characters.first,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    displayName,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Pretendard Variable',
+                    ),
+                  ),
+                ),
+                if (isMe) ...[
+                  const SizedBox(width: 6),
+                  _memberBadge(
+                    '나',
+                    background: Colors.white.withOpacity(0.16),
+                    foreground: Colors.white.withOpacity(0.92),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (isLeader)
+            _memberBadge(
+              '방장',
+              background: const Color.fromRGBO(255, 196, 102, 0.18),
+              foreground: const Color(0xFFFFD68A),
+              icon: Icons.workspace_premium_rounded,
+            )
+          else
+            Text(
+              '그룹원',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 12,
+                fontFamily: 'Pretendard Variable',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memberBadge(
+    String text, {
+    required Color background,
+    required Color foreground,
+    IconData? icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: foreground),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            text,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Pretendard Variable',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _mutedButton(BuildContext ctx, String label, VoidCallback onTap) {
     return SizedBox(
       width: double.infinity,
@@ -704,6 +909,8 @@ class _PartitionHomeSettingsModalState extends State<PartitionHomeSettingsModal>
                         ),
                       ),
                       const SizedBox(height: 18),
+                      _buildMembersSection(),
+                      const SizedBox(height: 14),
                       _groupSettingsRow(
                         context,
                         title: '그룹장 변경하기',

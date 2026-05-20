@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <application
-        android:label="partition_app"
+        android:label="파티션"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

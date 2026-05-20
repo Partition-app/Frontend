@@ -30,14 +30,14 @@ class HomeCalendarWidget extends StatefulWidget {
   /// [FrostedPanel] 기본 패딩과 동일
   static const double frostHorizontalPadding = 56;
   static const double frostVerticalPadding = 48;
-  static const double maxContentWidth = 440;
+  static const double maxContentWidth = 560;
   static const int gridWeekRows = 6;
   static const int gridColumns = 7;
   static const double gridSpacing = 8;
   /// 월 선택 + 요일 헤더 + 간격
   static const double monthHeaderHeight = 94;
   static const double minCellSize = 34;
-  static const double maxCellSize = 52;
+  static const double maxCellSize = 72;
 
   const HomeCalendarWidget({
     super.key,

@@ -243,6 +243,10 @@ class StorageService {
     return DateTime.fromMillisecondsSinceEpoch(ms);
   }
 
+  static Future<void> clearRoommateNearHomeAt() async {
+    await _prefs?.remove('roommate_near_home_at');
+  }
+
   /// 가구 참여 정보만 초기화(토큰·닉네임 유지 → 그룹 선택·재참여용).
   static Future<void> clearHouseholdAffiliation() async {
     try {

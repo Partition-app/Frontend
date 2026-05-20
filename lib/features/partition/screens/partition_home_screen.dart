@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:partition_app/core/config/app_config.dart';
 import 'package:partition_app/core/network/api_exception.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -120,8 +121,10 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
   Future<void> _onPullToRefresh() async {
     _calendarKey.currentState?.refreshCalendar();
     if (mounted) {
-      await context.read<HomeShareProvider>().initialize();
-      await _refreshHouseholdLeader();
+      await Future.wait([
+        context.read<HomeShareProvider>().refreshRoommateNearHomeFromServer(),
+        _refreshHouseholdLeader(),
+      ]);
     }
   }
 
@@ -291,7 +294,7 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
                 const SizedBox(height: 12),
                 Text(
                   '귀가 공유를 사용하려면 위치 권한이 필요합니다.\n'
-                  '설정 > Partition App > 위치에서 허용해주세요.',
+                  '설정 > ${AppConfig.appName} > 위치에서 허용해주세요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.82),
@@ -347,8 +350,18 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final buttonWidth = screenWidth - 32;
+    final mediaSize = MediaQuery.sizeOf(context);
+    final screenWidth = mediaSize.width;
+    // 태블릿(가로 기준): 짧은 변이 600 이상일 때 — 캘린더/버튼 폭과 버튼 높이를 키운다.
+    final isTablet = mediaSize.shortestSide >= 600;
+    final availableButtonWidth = screenWidth - 32;
+    // 캘린더 폭과 동일하게 맞춰 시각적 정렬 보장.
+    final buttonWidth = math.min(
+      availableButtonWidth,
+      HomeCalendarWidget.maxContentWidth,
+    );
+    final buttonHeight = isTablet ? 64.0 : PartitionUiTokens.actionButtonHeight;
+    final buttonGap = isTablet ? 14.0 : 10.0;
     final scrollBottomPadding = _contentPaddingBottom +
         MediaQuery.viewPaddingOf(context).bottom +
         _scrollBottomInsetForTabBar +
@@ -408,28 +421,32 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: buttonGap),
             PrimaryButton(
               label: '일정 등록하기',
               width: buttonWidth,
+              height: buttonHeight,
               onPressed: () => _showScheduleRegistrationModal(context),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: buttonGap),
             PrimaryButton(
               label: 'AI 집안일 배정',
               width: buttonWidth,
+              height: buttonHeight,
               onPressed: () => _showChoreAssignmentModal(context),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: buttonGap),
             PrimaryButton(
               label: '집안일 직접 배정',
               width: buttonWidth,
+              height: buttonHeight,
               onPressed: () => _showChoreManualAssignmentModal(context),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: buttonGap),
             PrimaryButton(
               label: '설정',
               width: buttonWidth,
+              height: buttonHeight,
               onPressed: () => _showSettingsModal(context),
             ),
             const SizedBox(height: 12),

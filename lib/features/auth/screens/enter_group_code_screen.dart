@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:partition_app/core/router/app_router.dart';
 import 'package:partition_app/core/storage/storage_service.dart';
 import 'package:partition_app/features/auth/widgets/auth_flow_widgets.dart';
+import 'package:partition_app/features/partition/theme/home_share_style.dart';
 import 'package:partition_app/shared/widgets/glassmorphism_button.dart';
 import 'package:partition_app/features/auth/services/auth_service.dart';
 import 'package:partition_app/shared/utils/debug_helper.dart';
@@ -245,7 +246,7 @@ class _EnterGroupCodeScreenState extends State<EnterGroupCodeScreen> {
                     _resultMessage!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: _isSuccess ? Colors.green : Colors.red,
+                      color: _isSuccess ? HomeShareStyle.point : Colors.red,
                       fontSize: 12,
                       height: 1.4,
                     ),

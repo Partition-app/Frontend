@@ -121,6 +121,8 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
     _alarmPanelFetchArmed = isOpenEnough;
   }
 
+  Future<void> _onNotificationPanelRefresh() => _fetchAlarms();
+
   Future<void> _fetchAlarms() async {
     if (!mounted) return;
     final gen = ++_alarmFetchGeneration;
@@ -128,16 +130,19 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
       _alarmLoading = true;
       _alarmError = null;
     });
+    final roommateRefresh =
+        context.read<HomeShareProvider>().refreshRoommateNearHomeFromServer();
     try {
       final result = await _alarmService.fetchMyAlarms();
+      await roommateRefresh;
       if (!mounted || gen != _alarmFetchGeneration) return;
-      unawaited(context.read<HomeShareProvider>().refreshRoommateNearHomeFromServer());
       setState(() {
         _alarms = result.alarms;
         _alarmUnreadCount = result.unreadCount;
         _alarmLoading = false;
       });
     } catch (e) {
+      await roommateRefresh;
       if (!mounted || gen != _alarmFetchGeneration) return;
       setState(() {
         _alarmLoading = false;
@@ -778,21 +783,22 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   Widget _buildNotificationBody() {
     context.watch<AlarmNavigationController>();
     final homeShare = context.watch<HomeShareProvider>();
-    final nearRoommates = homeShare.nearHomeRoommates;
+    final allRoommates = homeShare.allRoommateStatuses;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (nearRoommates.isNotEmpty)
-          ...nearRoommates.map(
-            (roommate) => Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        if (allRoommates.isNotEmpty)
+          ...List.generate(allRoommates.length, (i) {
+            final roommate = allRoommates[i];
+            return Padding(
+              padding: EdgeInsets.fromLTRB(16, i == 0 ? 8 : 4, 16, 4),
               child: _buildRoommateNearHomeBanner(
-                nearHome: true,
+                nearHome: roommate.isNearHome,
                 bannerText: homeShare.roommateNearHomeBannerText(roommate),
               ),
-            ),
-          )
+            );
+          })
         else
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -803,7 +809,14 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
                   : '룸메이트가 집 근처에 없어요.',
             ),
           ),
-        Expanded(child: _buildAlarmListBody()),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _onNotificationPanelRefresh,
+            color: HomeShareStyle.point,
+            backgroundColor: const Color(0xFF1A2F42),
+            child: _buildAlarmListBody(),
+          ),
+        ),
       ],
     );
   }
@@ -944,23 +957,34 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
   }
 
   Widget _buildAlarmListBody() {
+    const scrollPhysics = AlwaysScrollableScrollPhysics(
+      parent: BouncingScrollPhysics(),
+    );
+
     if (_alarmLoading && _alarms.isEmpty && _alarmError == null) {
-      return Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Colors.white.withOpacity(0.6),
+      return ListView(
+        physics: scrollPhysics,
+        padding: const EdgeInsets.only(top: 48),
+        children: [
+          Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white.withOpacity(0.6),
+              ),
+            ),
           ),
-        ),
+        ],
       );
     }
     if (_alarmError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
+      return ListView(
+        physics: scrollPhysics,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+        children: [
+          Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
@@ -985,37 +1009,41 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
               ),
             ],
           ),
-        ),
+        ],
       );
     }
     if (_alarms.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.notifications_none_rounded,
-              size: 40,
-              color: Colors.white.withOpacity(0.3),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '새로운 알림이 없습니다',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 14,
-                decoration: TextDecoration.none,
-                decorationColor: Colors.transparent,
+      return ListView(
+        physics: scrollPhysics,
+        padding: const EdgeInsets.only(top: 48),
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.notifications_none_rounded,
+                size: 40,
+                color: Colors.white.withOpacity(0.3),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 10),
+              Text(
+                '새로운 알림이 없습니다',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 14,
+                  decoration: TextDecoration.none,
+                  decorationColor: Colors.transparent,
+                ),
+              ),
+            ],
+          ),
+        ],
       );
     }
 
     final bottomPad = MediaQuery.of(context).padding.bottom + 12;
     return ListView.separated(
-      physics: const BouncingScrollPhysics(),
+      physics: scrollPhysics,
       padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPad),
       itemCount: _alarms.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),

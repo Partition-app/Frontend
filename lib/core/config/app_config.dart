@@ -1,5 +1,5 @@
 class AppConfig {
-  static const String appName = 'Partition App';
+  static const String appName = '파티션';
   static const String appVersion = '1.0.0';
   
   // 백엔드 API (Spring)
