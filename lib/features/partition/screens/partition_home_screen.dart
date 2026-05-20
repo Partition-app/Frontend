@@ -450,11 +450,14 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
               onPressed: () => _showSettingsModal(context),
             ),
             const SizedBox(height: 12),
-            RepaintBoundary(
-              child: _HomeShareCard(
-                onToggle: () => _onToggleSharing(context),
-                onEditLocation: () => _onEditHomeLocation(context),
-                canEditHomeLocation: _isHouseholdLeader,
+            SizedBox(
+              width: buttonWidth,
+              child: RepaintBoundary(
+                child: _HomeShareCard(
+                  onToggle: () => _onToggleSharing(context),
+                  onEditLocation: () => _onEditHomeLocation(context),
+                  canEditHomeLocation: _isHouseholdLeader,
+                ),
               ),
             ),
             const SizedBox(height: 20),

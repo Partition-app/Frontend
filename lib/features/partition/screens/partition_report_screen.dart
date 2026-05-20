@@ -8,6 +8,7 @@ import 'package:partition_app/features/auth/providers/auth_provider.dart';
 import 'package:partition_app/features/partition/models/partition_report_model.dart';
 import 'package:partition_app/features/partition/services/report_service.dart';
 import 'package:partition_app/features/partition/theme/home_share_style.dart';
+import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 import 'package:partition_app/features/partition/widgets/shared_expense_filter_chip.dart';
 import 'package:partition_app/shared/utils/partition_dummy_data_policy.dart';
 import 'package:partition_app/shared/widgets/frosted_panel.dart';
@@ -148,7 +149,6 @@ class PartitionReportScreen extends StatefulWidget {
 
 class _PartitionReportScreenState extends State<PartitionReportScreen> {
   static const double _headerHeight = 87.5;
-  static const double _contentPaddingHorizontal = 16.0;
   static const double _contentPaddingBottom = 16.0;
   static const double _scrollBottomInsetForTabBar = 147.0;
   static const double _scrollExtraTailSpace = 56.0;
@@ -743,6 +743,13 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
                   (symmetricPadFull * _chipVerticalSpacingScale)
                       .clamp(12.0, 88.0);
 
+              final horizontalPadding =
+                  PartitionUiTokens.resolveHorizontalPadding(
+                    constraints.maxWidth.isFinite && constraints.maxWidth > 0
+                        ? constraints.maxWidth
+                        : mq.width,
+                  );
+
               return RefreshIndicator(
                 onRefresh: _onPullToRefresh,
                 color: Colors.white,
@@ -754,9 +761,9 @@ class _PartitionReportScreenState extends State<PartitionReportScreen> {
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: EdgeInsets.fromLTRB(
-                    _contentPaddingHorizontal,
+                    horizontalPadding,
                     0,
-                    _contentPaddingHorizontal,
+                    horizontalPadding,
                     scrollBottomPadding,
                   ),
                   children: [

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// 파티션 홈/모달 UI에서 공통으로 쓰는 디자인 토큰.
@@ -50,4 +52,23 @@ abstract final class PartitionUiTokens {
 
   static Color textHint([double opacity = 0.45]) =>
       Colors.white.withValues(alpha: opacity);
+
+  // ── 반응형 레이아웃 토큰 ──────────────────────────────────────────────────
+  /// 태블릿 판정 기준 — 짧은 변(shortestSide)이 이 값 이상이면 태블릿으로 본다.
+  static const double tabletShortestSideBreakpoint = 600;
+
+  /// 홈 캘린더/버튼 폭과 동일한 컨텐츠 최대 폭.
+  /// 공용소비·리포트·게시판 등에서도 동일한 폭을 사용해 태블릿에서 좌우 여백이 자동으로 늘어난다.
+  static const double maxContentWidth = 560;
+
+  /// 폰 기본 가로 패딩.
+  static const double basePaddingHorizontal = 16;
+
+  /// 주어진 [width]에 대해 컨텐츠가 [maxContentWidth] 안에 들어가도록 좌우 패딩을 계산한다.
+  /// 좁은 화면(폰)에서는 [basePaddingHorizontal], 넓은 화면(태블릿/웹)에서는
+  /// 양옆이 자동으로 늘어나서 컨텐츠가 중앙으로 모인다.
+  static double resolveHorizontalPadding(double width) {
+    final extra = (width - maxContentWidth) / 2;
+    return math.max(basePaddingHorizontal, extra);
+  }
 }

@@ -43,7 +43,6 @@ class _PartitionSharedExpenseScreenState
 
   // Constants — 본문 영역 높이(상태줄 제외). 기존 125의 약 0.7로 얇게.
   static const double _headerHeight = 87.5;
-  static const double _contentPaddingHorizontal = 16.0;
   static const double _contentPaddingBottom = 16.0;
 
   /// 하단 글래스 탭바 등이 본문과 겹칠 때 스크롤로 버튼까지 닿게 하기 위한 추가 여백
@@ -1401,6 +1400,13 @@ class _PartitionSharedExpenseScreenState
                   ((symmetricPad + _anchorVerticalInsetBonus) * 0.7)
                       .clamp(8.0, 64.0);
 
+              final horizontalPadding =
+                  PartitionUiTokens.resolveHorizontalPadding(
+                    constraints.maxWidth.isFinite && constraints.maxWidth > 0
+                        ? constraints.maxWidth
+                        : mq.width,
+                  );
+
               return RefreshIndicator(
                 onRefresh: _onPullToRefresh,
                 color: Colors.white,
@@ -1412,9 +1418,9 @@ class _PartitionSharedExpenseScreenState
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: EdgeInsets.fromLTRB(
-                    _contentPaddingHorizontal,
+                    horizontalPadding,
                     0,
-                    _contentPaddingHorizontal,
+                    horizontalPadding,
                     scrollBottomPadding,
                   ),
                   children: [

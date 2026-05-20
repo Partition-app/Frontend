@@ -7,6 +7,7 @@ import 'package:partition_app/features/partition/models/reservation_item_model.d
 import 'package:partition_app/features/partition/models/reservation_booking_model.dart';
 import 'package:partition_app/features/partition/services/reservation_items_service.dart';
 import 'package:partition_app/features/partition/services/reservations_service.dart';
+import 'package:partition_app/features/partition/theme/partition_ui_tokens.dart';
 import 'package:partition_app/features/partition/widgets/reservation_edit_dialog.dart';
 import 'package:partition_app/features/partition/widgets/reservation_item_detail_sheet.dart';
 import 'package:partition_app/shared/widgets/frosted_panel.dart';
@@ -94,7 +95,6 @@ class PartitionBoardScreen extends StatefulWidget {
 
 class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
   static const double _headerHeight = 87.5;
-  static const double _contentPaddingHorizontal = 16.0;
   static const double _contentPaddingBottom = 16.0;
   static const double _scrollBottomInsetForTabBar = 147.0;
   static const double _scrollExtraTailSpace = 56.0;
@@ -533,28 +533,39 @@ class _PartitionBoardScreenState extends State<PartitionBoardScreen> {
       children: [
         _buildHeader(),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: _onPullToRefresh,
-            color: Colors.white,
-            backgroundColor: Colors.white.withOpacity(0.15),
-            child: ListView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: EdgeInsets.fromLTRB(
-                _contentPaddingHorizontal,
-                _spacingMedium,
-                _contentPaddingHorizontal,
-                scrollBottomPadding,
-              ),
-              children: [
-                _buildMainCard(),
-                const SizedBox(height: _spacingSmall),
-                ..._buildActionButtons(),
-                const SizedBox(height: 12),
-              ],
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalPadding =
+                  PartitionUiTokens.resolveHorizontalPadding(
+                    constraints.maxWidth.isFinite && constraints.maxWidth > 0
+                        ? constraints.maxWidth
+                        : MediaQuery.sizeOf(context).width,
+                  );
+              return RefreshIndicator(
+                onRefresh: _onPullToRefresh,
+                color: Colors.white,
+                backgroundColor: Colors.white.withOpacity(0.15),
+                child: ListView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    _spacingMedium,
+                    horizontalPadding,
+                    scrollBottomPadding,
+                  ),
+                  children: [
+                    _buildMainCard(),
+                    const SizedBox(height: _spacingSmall),
+                    ..._buildActionButtons(),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ],
