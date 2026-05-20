@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:kakao_flutter_sdk_common/kakao_flutter_sdk_common.dart';
 import 'package:partition_app/core/config/app_config.dart';
@@ -23,8 +24,27 @@ const double _kPhoneFrameWidth = 730.0;
 /// 웹/PWA에서 앱 바깥(상·하단 세이프에어리어·레터박스) 배경색
 const Color _kWebBackdropColor = Color(0xFF26394B);
 
+/// 앱 하단 글래스 바와 톤이 맞는 시스템 내비게이션 바 색상 (Samsung 제스처 힌트 포함).
+const Color _kSystemNavigationBarColor = Color(0xFF26394B);
+
+/// 앱 전역에서 적용되는 시스템 UI 스타일.
+/// - Android 시스템 내비게이션 바를 앱 하단과 같은 네이비 톤으로 통일
+/// - 다크 배경 위 흰색 아이콘
+const SystemUiOverlayStyle _kAppSystemUiOverlayStyle = SystemUiOverlayStyle(
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.light,
+  statusBarBrightness: Brightness.dark,
+  systemNavigationBarColor: _kSystemNavigationBarColor,
+  systemNavigationBarDividerColor: _kSystemNavigationBarColor,
+  systemNavigationBarIconBrightness: Brightness.light,
+  systemNavigationBarContrastEnforced: false,
+);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Android 시스템 내비게이션 바(태스크바·제스처 힌트)를 앱 톤에 맞게 통일
+  SystemChrome.setSystemUIOverlayStyle(_kAppSystemUiOverlayStyle);
 
   // StorageService를 앱 시작 시점에 미리 초기화해 _prefs null 문제 방지
   await StorageService.init();
@@ -57,29 +77,32 @@ class PartitionApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: AppProviders.providers,
-      child: MaterialApp(
-        title: AppConfig.appName,
-        debugShowCheckedModeBanner: false,
-        theme: kIsWeb ? _webPageBackdrop(AppTheme.lightTheme) : AppTheme.lightTheme,
-        darkTheme: kIsWeb ? _webPageBackdrop(AppTheme.darkTheme) : AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        // 디버그 모드에서는 DebugHomeScreen을 시작 화면으로
-        home: kDebugMode
-            ? const DebugHomeScreen()
-            : const AuthWrapper(),
-        // 웹 새로고침 시 URL과 무관하게 항상 AuthWrapper에서 시작해 홈으로 리다이렉트
-        onGenerateInitialRoutes: kDebugMode
-            ? null
-            : (_) => [
-                  MaterialPageRoute(
-                    builder: (_) => const AuthWrapper(),
-                  ),
-                ],
-        onGenerateRoute: AppRouter.generateRoute,
-        // 넓은 화면(웹·태블릿 등)에서 세로형 폰 프레임으로 중앙 배치
-        builder: (context, child) => _PhoneFrameWrapper(child: child!),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _kAppSystemUiOverlayStyle,
+      child: MultiProvider(
+        providers: AppProviders.providers,
+        child: MaterialApp(
+          title: AppConfig.appName,
+          debugShowCheckedModeBanner: false,
+          theme: kIsWeb ? _webPageBackdrop(AppTheme.lightTheme) : AppTheme.lightTheme,
+          darkTheme: kIsWeb ? _webPageBackdrop(AppTheme.darkTheme) : AppTheme.darkTheme,
+          themeMode: ThemeMode.system,
+          // 디버그 모드에서는 DebugHomeScreen을 시작 화면으로
+          home: kDebugMode
+              ? const DebugHomeScreen()
+              : const AuthWrapper(),
+          // 웹 새로고침 시 URL과 무관하게 항상 AuthWrapper에서 시작해 홈으로 리다이렉트
+          onGenerateInitialRoutes: kDebugMode
+              ? null
+              : (_) => [
+                    MaterialPageRoute(
+                      builder: (_) => const AuthWrapper(),
+                    ),
+                  ],
+          onGenerateRoute: AppRouter.generateRoute,
+          // 넓은 화면(웹·태블릿 등)에서 세로형 폰 프레임으로 중앙 배치
+          builder: (context, child) => _PhoneFrameWrapper(child: child!),
+        ),
       ),
     );
   }
