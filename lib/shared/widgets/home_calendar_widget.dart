@@ -155,9 +155,18 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     if (assignee == null || assignee.trim().isEmpty) return false;
     final a = assignee.trim().toLowerCase();
     final m = meName.trim().toLowerCase();
+    if (m.isEmpty) return false;
     if (a == m) return true;
-    // "홍길동 · 설거지" 형태·앞뒤 공백 차이
-    if (a.startsWith('$m ·') || a.startsWith('$m·')) return true;
+    // "홍길동 · 설거지" 형태·앞뒤 공백 차이 등 흡수
+    if (a.startsWith('$m ·') ||
+        a.startsWith('$m·') ||
+        a.startsWith('$m ') ||
+        a.endsWith(' $m') ||
+        a.contains(' $m ') ||
+        a.contains('·$m') ||
+        a.contains('$m·')) {
+      return true;
+    }
     return false;
   }
 
@@ -188,29 +197,32 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
     });
   }
 
-  /// GET `/calendars/daily` — Swagger `isOwner` 우선, 없을 때만 담당자 ID·이름으로 추정
+  /// CHORE 담당 여부 — 일간 API 명세상 CHORE의 `isOwner`는 항상 null·`assigneeId`도 없으므로
+  /// `_myUserId`가 있고 `assigneeId`가 함께 오면 그것을 우선 사용하고, 그 외에는 이름으로 비교한다.
   bool _choreOwnedByMe(DailyCalendarItem item) {
-    if (item.isOwner == true) return true;
-    if (item.isOwner == false) return false;
     if (_myUserId != null &&
         item.assigneeId != null &&
         item.assigneeId! > 0 &&
         item.assigneeId == _myUserId) {
       return true;
     }
+    final me = _meNameForChores.trim();
+    if (me.isEmpty || me == '나') {
+      // 본인 이름이 아직 로드되지 않은 상태 — 이 시점엔 판별 불가 → false 유지
+      return false;
+    }
     if (item.assigneeName != null &&
         item.assigneeName!.trim().isNotEmpty &&
-        _assigneeNameMatchesMe(item.assigneeName, _meNameForChores)) {
+        _assigneeNameMatchesMe(item.assigneeName, me)) {
       return true;
     }
     return false;
   }
 
-  /// 완료 체크박스 — 일간 API `isOwner: true`인 CHORE만 (양수 choreId)
-  bool _canShowChoreCompletionCheckbox(_CalendarEvent event) {
+  /// 완료 체크 토글 — 본인 담당 CHORE만 (양수 choreId)
+  bool _canToggleChoreCompletion(_CalendarEvent event) {
     if (event.id == null || event.id! <= 0) return false;
-    if (event.dailyApiIsOwner == true) return true;
-    if (event.dailyApiIsOwner == false) return false;
+    if (_normalizeDailyCategory(event.category) != 'CHORE') return false;
     return event.isOwner == true;
   }
 
@@ -264,7 +276,7 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         }
       }
 
-      final bool? dailyApiIsOwner = cat == 'CHORE' ? item.isOwner : null;
+      // CHORE: `isOwner`는 명세상 null — SCHEDULE만 API `isOwner` 사용
       final bool? isOwnerForEvent =
           cat == 'CHORE' ? _choreOwnedByMe(item) : item.isOwner;
 
@@ -277,7 +289,6 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
         assigneeId: item.assigneeId,
         choreType: item.choreType,
         choreTitle: cat == 'CHORE' ? item.title : null,
-        dailyApiIsOwner: dailyApiIsOwner,
         isOwner: isOwnerForEvent,
         isCompleted: item.isCompleted,
       );
@@ -342,7 +353,6 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           id: id,
           category: 'CHORE',
           assigneeName: assignee,
-          dailyApiIsOwner: isMine,
           isOwner: isMine,
           isCompleted: false,
         ));
@@ -431,7 +441,6 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           assigneeId: ev.assigneeId,
           choreType: ev.choreType,
           choreTitle: ev.choreTitle,
-          dailyApiIsOwner: ev.dailyApiIsOwner,
           isOwner: ev.isOwner,
           isCompleted: c,
         );
@@ -514,7 +523,6 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
               id: id,
               category: 'CHORE',
               assigneeName: assignee,
-              dailyApiIsOwner: isMine,
               isOwner: isMine,
               isCompleted: false,
             ));
@@ -1036,18 +1044,21 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           final cat = _normalizeDailyCategory(event.category);
           final isSchedule = cat == 'SCHEDULE';
           final canEdit = isSchedule && (event.isOwner == true);
-          // 집안일: 완료 체크는 본인 담당만, 수정·삭제는 그룹 집안일 전체
+          // 집안일: 체크박스는 모든 CHORE 항목에 표시(완료 상태 시각화)
+          // 토글(클릭)·수정·삭제는 본인 담당/양수 id에 한정
           final isChoreItem =
-              event.type == CalendarEventType.chore && cat == 'CHORE' && event.id != null;
+              event.type == CalendarEventType.chore && cat == 'CHORE';
+          final hasServerChoreId = event.id != null && event.id! > 0;
+          final showChoreCheckbox = isChoreItem;
           final canToggleChore =
-              isChoreItem && _canShowChoreCompletionCheckbox(event);
-          final canManageChore =
-              isChoreItem && event.id != null && event.id! > 0;
+              isChoreItem && hasServerChoreId && _canToggleChoreCompletion(event);
+          final canManageChore = isChoreItem && hasServerChoreId;
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _EventChip(
               event: event,
+              showChoreCheckbox: showChoreCheckbox,
               onDelete: event.id != null && canEdit
                   ? () => _handleDeleteSchedule(event.id!, date)
                   : canManageChore
@@ -1180,6 +1191,30 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
               : '집안일 완료 처리에 실패했어요.',
         );
       }
+      final dateKey = _dateKey(date);
+      if (mounted) {
+        setState(() {
+          final items = _cachedDailyEvents?[dateKey];
+          if (items != null) {
+            _cachedDailyEvents![dateKey] = items.map((item) {
+              if (item.id == choreId &&
+                  _normalizeDailyCategory(item.category) == 'CHORE') {
+                return DailyCalendarItem(
+                  category: item.category,
+                  id: item.id,
+                  title: item.title,
+                  assigneeName: item.assigneeName,
+                  assigneeId: item.assigneeId,
+                  choreType: item.choreType,
+                  isCompleted: completed,
+                  isOwner: item.isOwner,
+                );
+              }
+              return item;
+            }).toList();
+          }
+        });
+      }
       await _loadDailyCalendarData(date, forceRefresh: true);
       if (!mounted) return;
       await _loadCalendarData(
@@ -1234,23 +1269,9 @@ class HomeCalendarWidgetState extends State<HomeCalendarWidget> {
           assigneeName: assigneeName,
           assigneeId: assigneeId,
           choreType: detail.choreType,
-          isCompleted: detail.isCompleted,
-          isOwner: item.isOwner == true
-              ? true
-              : (item.isOwner == false
-                  ? false
-                  : _choreOwnedByMe(
-                      DailyCalendarItem(
-                        category: item.category,
-                        id: item.id,
-                        title: item.title,
-                        assigneeName: assigneeName,
-                        assigneeId: assigneeId,
-                        choreType: detail.choreType,
-                        isCompleted: detail.isCompleted,
-                        isOwner: null,
-                      ),
-                    )),
+          // 완료 여부는 GET `/calendars/daily`의 `isCompleted`만 신뢰
+          isCompleted: item.isCompleted,
+          isOwner: null,
         );
         return merged;
       }).toList();
@@ -2057,6 +2078,7 @@ class _DateHighlightPainter extends CustomPainter {
 
 class _EventChip extends StatelessWidget {
   final _CalendarEvent event;
+  final bool showChoreCheckbox;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final ValueChanged<bool>? onChoreCompleted;
@@ -2064,6 +2086,7 @@ class _EventChip extends StatelessWidget {
 
   const _EventChip({
     required this.event,
+    this.showChoreCheckbox = false,
     this.onDelete,
     this.onEdit,
     this.onChoreCompleted,
@@ -2073,7 +2096,7 @@ class _EventChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color dotColor = _eventColor(event.type);
-    final showChoreCheckbox = onChoreCompleted != null;
+    final canToggleChore = onChoreCompleted != null;
     final showChoreCompletedStrike =
         event.type == CalendarEventType.chore && (event.isCompleted ?? false);
     return ClipRRect(
@@ -2178,7 +2201,7 @@ class _EventChip extends StatelessWidget {
                   height: 22,
                   child: Checkbox(
                     value: event.isCompleted ?? false,
-                    onChanged: choreCheckboxBusy
+                    onChanged: !canToggleChore || choreCheckboxBusy
                         ? null
                         : (v) {
                             if (v != null) onChoreCompleted!(v);
@@ -2227,8 +2250,6 @@ class _CalendarEvent {
   final int? assigneeId;
   final String? choreType;
   final String? choreTitle;
-  /// GET `/calendars/daily` 원본 `isOwner` (체크박스 판단용)
-  final bool? dailyApiIsOwner;
   final bool? isOwner;
   final bool? isCompleted;
 
@@ -2241,7 +2262,6 @@ class _CalendarEvent {
     this.assigneeId,
     this.choreType,
     this.choreTitle,
-    this.dailyApiIsOwner,
     this.isOwner,
     this.isCompleted,
   });
