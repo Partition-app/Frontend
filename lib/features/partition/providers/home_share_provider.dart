@@ -17,7 +17,8 @@ import 'package:partition_app/features/partition/services/home_share_service.dar
 class HomeShareProvider extends ChangeNotifier {
   static const Duration _cooldown = Duration(minutes: 30);
   static const Duration _roommateNearHomeTtl = Duration(minutes: 30);
-  static const Duration _roommateNearHomePollInterval = Duration(seconds: 60);
+  /// 폴링 주기 — 너무 길면 룸메이트 상태 갱신이 지연되니 30초로 짧게 유지
+  static const Duration _roommateNearHomePollInterval = Duration(seconds: 30);
   /// 집에 머무는 동안 주기적으로 POST를 재시도하는 체크 간격.
   static const Duration _atHomeRefreshInterval = Duration(minutes: 5);
   /// 마지막 전송 이후 이 시간이 지나면 서버 쿨다운(30분)이 끝났다고 보고 재전송.
@@ -229,6 +230,7 @@ class HomeShareProvider extends ChangeNotifier {
   /// GET `/households/location-events/near-home`으로 룸메이트 귀가 배너를 갱신합니다.
   /// 성공 시 [true], 네트워크·API 실패 시 [false] (로컬 캐시 폴백용).
   Future<bool> refreshRoommateNearHomeFromServer() async {
+    debugPrint('[HomeShare] GET /households/location-events/near-home 호출');
     try {
       final statuses = await _service.fetchRoommateNearHomeStatus();
       final myId = int.tryParse(await StorageService.getUserId() ?? '');
@@ -239,6 +241,10 @@ class HomeShareProvider extends ChangeNotifier {
         ..sort((a, b) => a.userId.compareTo(b.userId));
       final nearOthers =
           others.where((s) => s.isNearHome).toList(growable: false);
+      debugPrint(
+        '[HomeShare] 응답 — 본인 제외 ${others.length}명 / 집근처 ${nearOthers.length}명 '
+        '(${others.map((s) => '${s.name}(${s.userId})=${s.isNearHome}').join(', ')})',
+      );
       _setRoommateNearHomeFromServer(
         near: nearOthers.isNotEmpty,
         roommates: nearOthers,
@@ -247,6 +253,9 @@ class HomeShareProvider extends ChangeNotifier {
       return true;
     } on ApiException catch (e) {
       debugPrint('[HomeShare] 룸메이트 귀가 현황 조회 실패: $e');
+      return false;
+    } catch (e, st) {
+      debugPrint('[HomeShare] 룸메이트 귀가 현황 조회 예외: $e\n$st');
       return false;
     }
   }

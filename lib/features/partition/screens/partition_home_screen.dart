@@ -352,7 +352,7 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
   Widget build(BuildContext context) {
     final mediaSize = MediaQuery.sizeOf(context);
     final screenWidth = mediaSize.width;
-    // 태블릿(가로 기준): 짧은 변이 600 이상일 때 — 캘린더/버튼 폭과 버튼 높이를 키운다.
+    // 태블릿(가로 기준): 짧은 변이 600 이상일 때 — 캘린더/버튼 폭을 키운다.
     final isTablet = mediaSize.shortestSide >= 600;
     final availableButtonWidth = screenWidth - 32;
     // 캘린더 폭과 동일하게 맞춰 시각적 정렬 보장.
@@ -360,8 +360,9 @@ class _PartitionHomeScreenState extends State<PartitionHomeScreen> {
       availableButtonWidth,
       HomeCalendarWidget.maxContentWidth,
     );
-    final buttonHeight = isTablet ? 64.0 : PartitionUiTokens.actionButtonHeight;
-    final buttonGap = isTablet ? 14.0 : 10.0;
+    // 게시판 "예약하기" 등 다른 화면 PrimaryButton과 두께(46px) 통일
+    final buttonHeight = PartitionUiTokens.actionButtonHeight;
+    final buttonGap = isTablet ? 12.0 : 10.0;
     final scrollBottomPadding = _contentPaddingBottom +
         MediaQuery.viewPaddingOf(context).bottom +
         _scrollBottomInsetForTabBar +

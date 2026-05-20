@@ -207,7 +207,13 @@ class RoommateNearHomeStatus {
 
   static int? _parseUserId(Map<String, dynamic> item) {
     for (final key in ['userId', 'memberId', 'id']) {
-      final id = (item[key] as num?)?.toInt();
+      final raw = item[key];
+      int? id;
+      if (raw is num) {
+        id = raw.toInt();
+      } else if (raw is String) {
+        id = int.tryParse(raw.trim());
+      }
       if (id != null && id > 0) return id;
     }
     return null;
