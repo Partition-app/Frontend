@@ -472,10 +472,8 @@ class _PartitionMainScreenState extends State<PartitionMainScreen>
       itemCount: _screens.length,
       onPageChanged: (i) {
         if (_currentIndex != i) setState(() => _currentIndex = i);
-        // 탭 전환마다 룸메이트 귀가 현황을 한 번 더 가져와 배너를 즉시 갱신
-        unawaited(
-          context.read<HomeShareProvider>().refreshRoommateNearHomeFromServer(),
-        );
+        // 룸메이트 귀가 현황은 명시적 새로고침(pull-to-refresh)·앱 복귀·FCM 수신 시에만
+        // 호출하므로 탭 전환에서는 별도 GET을 발생시키지 않습니다 (인스턴스 비용 절감).
       },
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),

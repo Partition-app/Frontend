@@ -17,10 +17,9 @@ import 'package:partition_app/features/partition/services/home_share_service.dar
 class HomeShareProvider extends ChangeNotifier {
   static const Duration _cooldown = Duration(minutes: 30);
   static const Duration _roommateNearHomeTtl = Duration(minutes: 30);
-  /// 폴링 주기 — 너무 길면 룸메이트 상태 갱신이 지연되니 30초로 짧게 유지
-  static const Duration _roommateNearHomePollInterval = Duration(seconds: 30);
   /// 집에 머무는 동안 주기적으로 POST를 재시도하는 체크 간격.
-  static const Duration _atHomeRefreshInterval = Duration(minutes: 5);
+  /// 인스턴스 비용 절감을 위해 평소(앱 백그라운드 포함)에는 10분에 1번만 자기 위치를 보냄.
+  static const Duration _atHomeRefreshInterval = Duration(minutes: 10);
   /// 마지막 전송 이후 이 시간이 지나면 서버 쿨다운(30분)이 끝났다고 보고 재전송.
   static const Duration _atHomeRefreshThreshold = Duration(minutes: 28);
   static const double _defaultRadius = 300.0;
@@ -37,7 +36,6 @@ class HomeShareProvider extends ChangeNotifier {
   DateTime? _lastNotifiedAt;
   StreamSubscription<Position>? _positionSub;
   Timer? _roommateNearHomeExpiryTimer;
-  Timer? _roommateNearHomePollTimer;
   /// 집에 머무는 동안 주기적으로 서버에 `entered_home_area`를 다시 보내는 타이머.
   Timer? _atHomeRefreshTimer;
   Future<void>? _ongoingInitialize;
@@ -132,7 +130,6 @@ class HomeShareProvider extends ChangeNotifier {
     if (!refreshed) {
       _restoreRoommateNearHomeFromStorage();
     }
-    _startRoommateNearHomePolling();
     notifyListeners();
   }
 
@@ -258,14 +255,6 @@ class HomeShareProvider extends ChangeNotifier {
       debugPrint('[HomeShare] 룸메이트 귀가 현황 조회 예외: $e\n$st');
       return false;
     }
-  }
-
-  void _startRoommateNearHomePolling() {
-    _roommateNearHomePollTimer?.cancel();
-    _roommateNearHomePollTimer = Timer.periodic(
-      _roommateNearHomePollInterval,
-      (_) => unawaited(refreshRoommateNearHomeFromServer()),
-    );
   }
 
   void _setRoommateNearHomeFromServer({
@@ -684,7 +673,6 @@ class HomeShareProvider extends ChangeNotifier {
   @override
   void dispose() {
     _roommateNearHomeExpiryTimer?.cancel();
-    _roommateNearHomePollTimer?.cancel();
     _stopAtHomeRefreshTimer();
     _stopLocationWatch();
     super.dispose();

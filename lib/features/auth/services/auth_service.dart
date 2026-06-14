@@ -63,6 +63,11 @@ String? _parseHouseholdMemberRole(Map<String, dynamic> e) {
 class AuthService {
   final ApiClient _apiClient = ApiClient();
 
+  /// 진행 중인 요청을 공유해 동시 호출 시 네트워크 요청을 1회로 합칩니다
+  /// (라우팅 결정 직후 중복 호출, 사용자 더블탭 등 방지).
+  static Future<HouseholdResponseModel?>? _inflightFetchMyHousehold;
+  static Future<KakaoAuthResponseModel>? _inflightKakaoLogin;
+
   Future<AuthResponseModel> login(String email, String password) async {
     try {
       final response = await _apiClient.post(
@@ -165,9 +170,28 @@ class AuthService {
   }
 
   /// 카카오 로그인
+  ///
+  /// 같은 카카오 토큰으로 동시에 두 번 호출되면 첫 번째 in-flight Future를 공유합니다
+  /// (사용자 더블탭·OS 전환 중 재요청 등에 의한 서버 중복 호출 방지).
   Future<KakaoAuthResponseModel> loginWithKakao({
     required String kakaoAccessToken,
-  }) async {
+  }) {
+    final inflight = _inflightKakaoLogin;
+    if (inflight != null) return inflight;
+
+    final future = _loginWithKakaoImpl(kakaoAccessToken);
+    _inflightKakaoLogin = future;
+    future.whenComplete(() {
+      if (identical(_inflightKakaoLogin, future)) {
+        _inflightKakaoLogin = null;
+      }
+    });
+    return future;
+  }
+
+  Future<KakaoAuthResponseModel> _loginWithKakaoImpl(
+    String kakaoAccessToken,
+  ) async {
     try {
       final response = await _apiClient.post(
         AppConfig.kakaoLoginEndpoint,
@@ -430,7 +454,23 @@ class AuthService {
   /// 현재 로그인한 사용자의 그룹(가구) 정보를 서버에서 조회합니다.
   /// `GET /households/me`
   /// 그룹에 속하지 않았거나 요청 실패 시 null 반환.
-  Future<HouseholdResponseModel?> fetchMyHousehold() async {
+  ///
+  /// 동시에 여러 곳에서 호출되어도 in-flight Future를 공유해 네트워크 요청은 1회만 발생합니다.
+  Future<HouseholdResponseModel?> fetchMyHousehold() {
+    final inflight = _inflightFetchMyHousehold;
+    if (inflight != null) return inflight;
+
+    final future = _fetchMyHouseholdImpl();
+    _inflightFetchMyHousehold = future;
+    future.whenComplete(() {
+      if (identical(_inflightFetchMyHousehold, future)) {
+        _inflightFetchMyHousehold = null;
+      }
+    });
+    return future;
+  }
+
+  Future<HouseholdResponseModel?> _fetchMyHouseholdImpl() async {
     try {
       final response = await _apiClient.get(
         AppConfig.householdsMeEndpoint,
