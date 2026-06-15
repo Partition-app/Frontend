@@ -119,8 +119,17 @@ class HomeShareProvider extends ChangeNotifier {
         await _ensureHomeLocationFromServer();
       }
       if (_homeLocation != null) {
-        await _startLocationWatch();
-        await _evaluateCurrentPosition();
+        // 다른 디바이스 동기화로 자동 ON된 경우, 이 디바이스는 위치 권한이 없을 수 있음.
+        // 권한 다이얼로그를 갑자기 띄우지 않고 권한이 있을 때만 감시 시작 — 권한이 없는
+        // 기기에서도 토글 ON 상태는 그대로 표시되며, 사용자가 직접 토글하거나 권한을
+        // 부여한 뒤 다음 initialize·resume에서 자동으로 감시가 시작됨.
+        final hasPermission = await _hasLocationPermission();
+        if (hasPermission) {
+          await _startLocationWatch();
+          await _evaluateCurrentPosition();
+        } else {
+          debugPrint('[HomeShare] 위치 권한 없음 — 감시 보류 (토글 ON 표시는 유지)');
+        }
       } else {
         debugPrint('[HomeShare] 귀가 공유 ON이지만 집 좌표 없음 — 위치 감시 대기');
       }
@@ -135,22 +144,34 @@ class HomeShareProvider extends ChangeNotifier {
 
   /// 서버 GET으로 동의·집 위치를 보강합니다.
   ///
-  /// - 로컬이 ON이면 서버가 false/null일 때 동의를 다시 등록합니다.
-  /// - 서버만 ON이고 로컬이 OFF면 **자동으로 켜지 않습니다** (가입 시 기본 OFF).
+  /// 멀티 디바이스 동기화 정책 — 서버를 single source of truth로 사용합니다:
+  /// - 서버 true → 로컬도 true (다른 디바이스에서 켰으면 이 디바이스도 따라감).
+  /// - 서버 false → 로컬도 false (다른 디바이스에서 껐으면 이 디바이스도 끔).
+  /// - 서버 null(미응답·미구현) → 로컬 ON 시 재등록 시도, OFF는 그대로 유지.
   Future<void> _syncFromServerIfPossible() async {
     final localEnabled = _isEnabled;
 
     try {
       final serverAgreed = await _service.fetchLocationConsent();
-      if (serverAgreed == true && localEnabled) {
+      if (serverAgreed == true) {
+        // 서버 ON — 로컬이 OFF였다면 다른 디바이스에서 켠 것이므로 따라간다.
+        if (!localEnabled) {
+          debugPrint('[HomeShare] 서버 ON · 로컬 OFF → 다른 디바이스 동기화로 ON');
+        }
         _isEnabled = true;
         await StorageService.setSharingEnabled(true);
-      } else if (serverAgreed == false && !localEnabled) {
+      } else if (serverAgreed == false) {
+        // 서버 OFF — 로컬이 ON이었다면 다른 디바이스에서 끈 것이므로 따라가서 OFF.
+        if (localEnabled) {
+          debugPrint('[HomeShare] 서버 OFF · 로컬 ON → 다른 디바이스 동기화로 OFF');
+        }
         _isEnabled = false;
         await StorageService.setSharingEnabled(false);
+        _isNearHome = false;
         _stopLocationWatch();
+        _stopAtHomeRefreshTimer();
       } else if (localEnabled) {
-        // 로컬 ON인데 서버가 false/null — 재등록 시도, UI는 ON 유지
+        // 서버 null(404·미구현 등)인데 로컬 ON — 재등록 시도, UI는 ON 유지.
         _isEnabled = true;
         try {
           await _service.saveLocationConsent(agreed: true);
@@ -226,8 +247,26 @@ class HomeShareProvider extends ChangeNotifier {
 
   /// GET `/households/location-events/near-home`으로 룸메이트 귀가 배너를 갱신합니다.
   /// 성공 시 [true], 네트워크·API 실패 시 [false] (로컬 캐시 폴백용).
+  ///
+  /// 새로고침은 사용자의 명시적 갱신 의도이므로, 룸메이트 GET과 함께 **자기 최신 위치도
+  /// 다시 평가**해 서버에 반영합니다. 이로써 다른 사용자가 새로고침했을 때 내 최신 상태가
+  /// 누락 없이 GET 응답에 들어가도록 보장합니다 (distanceFilter·GPS 떨림으로 인한
+  /// `_onPosition` 콜백 누락 보완).
   Future<bool> refreshRoommateNearHomeFromServer() async {
     debugPrint('[HomeShare] GET /households/location-events/near-home 호출');
+
+    // 다른 디바이스에서 토글·집 위치가 바뀌었을 수 있으니 동의·집 위치 상태도 같이 동기화.
+    // 룸메이트 GET과 병렬로 진행되어 응답 대기 시간에는 영향 없음.
+    unawaited(_syncFromServerIfPossible().then((_) {
+      // sync 결과로 _isEnabled / _homeLocation이 바뀌었을 수 있으므로 UI 갱신.
+      notifyListeners();
+    }));
+
+    // 자기 위치 재평가는 룸메이트 GET과 병렬로 진행 (응답 대기 시간에 영향 없음).
+    // _isEnabled / 권한 / _homeLocation이 갖춰졌을 때만 실제 평가가 일어나며,
+    // 새로고침 흐름에서 권한 다이얼로그가 갑자기 뜨지 않도록 silent 버전을 사용합니다.
+    unawaited(_silentlyEvaluateCurrentPosition());
+
     try {
       final statuses = await _service.fetchRoommateNearHomeStatus();
       final myId = int.tryParse(await StorageService.getUserId() ?? '');
@@ -558,6 +597,17 @@ class HomeShareProvider extends ChangeNotifier {
         permission != LocationPermission.deniedForever;
   }
 
+  /// 권한 다이얼로그를 띄우지 않고 현재 권한·위치 서비스 상태만 확인합니다.
+  /// 다른 디바이스에서 ON한 상태를 자동 동기화할 때 사용 — 사용자 인터랙션 없이
+  /// 권한 다이얼로그가 갑자기 뜨는 것을 방지합니다.
+  Future<bool> _hasLocationPermission() async {
+    final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+    final permission = await Geolocator.checkPermission();
+    return permission != LocationPermission.denied &&
+        permission != LocationPermission.deniedForever;
+  }
+
   Future<void> _startLocationWatch() async {
     _positionSub?.cancel();
 
@@ -595,6 +645,23 @@ class HomeShareProvider extends ChangeNotifier {
     }
   }
 
+  /// 권한 다이얼로그를 띄우지 않고 현재 좌표를 평가합니다.
+  /// 새로고침처럼 자동 트리거 흐름에서 사용 — 권한이 없으면 조용히 패스합니다.
+  Future<void> _silentlyEvaluateCurrentPosition() async {
+    if (!_isEnabled || _homeLocation == null) return;
+    if (!await _hasLocationPermission()) return;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      _onPosition(position);
+    } catch (e) {
+      debugPrint('[HomeShare] 현재 위치 자동 평가 실패: $e');
+    }
+  }
+
   void _stopLocationWatch() {
     _positionSub?.cancel();
     _positionSub = null;
@@ -621,6 +688,11 @@ class HomeShareProvider extends ChangeNotifier {
       // 집 반경 진입 또는 강제 호출(토글 ON 등) 시 POST 전송
       if (stateChanged || force) {
         _maybeNotify(force: force);
+      } else if (_isAtHomeStateStale()) {
+        // 같은 집 안 상태가 유지 중인데 서버 TTL(30분) 만료가 임박 — force POST로 갱신.
+        // 이러면 사용자가 새로고침할 때(또는 위치 콜백이 들어올 때) 룸메이트의 배너가
+        // 끊기지 않고 지속적으로 유지됩니다 (백그라운드 Timer 신뢰성 보완).
+        _maybeNotify(force: true);
       }
       _startAtHomeRefreshTimer();
     } else {
@@ -630,6 +702,14 @@ class HomeShareProvider extends ChangeNotifier {
     if (stateChanged) {
       notifyListeners();
     }
+  }
+
+  /// 마지막 `entered_home_area` POST 이후 [_atHomeRefreshThreshold]가 지나
+  /// 서버 TTL 만료가 임박했는지 여부.
+  bool _isAtHomeStateStale() {
+    final lastAt = _lastNotifiedAt;
+    if (lastAt == null) return true;
+    return DateTime.now().difference(lastAt) >= _atHomeRefreshThreshold;
   }
 
   void _maybeNotify({bool force = false}) {
