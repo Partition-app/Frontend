@@ -15,13 +15,18 @@ import 'package:partition_app/features/partition/services/home_share_service.dar
 ///   3. [disableSharing] — 위치 스트림 중단
 ///   4. [setHomeFromCurrentLocation] — 현재 GPS 좌표를 집 위치로 저장
 class HomeShareProvider extends ChangeNotifier {
-  static const Duration _cooldown = Duration(minutes: 30);
+  /// 같은 사용자에 대한 클라이언트 측 중복 POST 방지 쿨다운.
+  /// 서버 TTL이 짧을 가능성을 고려해 8분으로 단축 — `_atHomeRefreshThreshold`와 일치시켜
+  /// 자동 갱신이 막히지 않도록 함.
+  static const Duration _cooldown = Duration(minutes: 8);
   static const Duration _roommateNearHomeTtl = Duration(minutes: 30);
   /// 집에 머무는 동안 주기적으로 POST를 재시도하는 체크 간격.
-  /// 인스턴스 비용 절감을 위해 평소(앱 백그라운드 포함)에는 10분에 1번만 자기 위치를 보냄.
-  static const Duration _atHomeRefreshInterval = Duration(minutes: 10);
-  /// 마지막 전송 이후 이 시간이 지나면 서버 쿨다운(30분)이 끝났다고 보고 재전송.
-  static const Duration _atHomeRefreshThreshold = Duration(minutes: 28);
+  /// 5분으로 줄여 백그라운드 Timer 누락·서버 TTL 만료 위험을 줄임.
+  static const Duration _atHomeRefreshInterval = Duration(minutes: 5);
+  /// 마지막 전송 이후 이 시간이 지나면 서버 측이 만료됐다고 보고 force POST로 재전송.
+  /// 서버 측 entered_home_area TTL이 약 10분일 가능성에 대비해 8분으로 단축
+  /// (서버 TTL이 더 길어도 클라가 자주 갱신하는 건 안전 — 같은 사용자 30분 쿨다운으로 무시될 뿐).
+  static const Duration _atHomeRefreshThreshold = Duration(minutes: 8);
   static const double _defaultRadius = 300.0;
 
   bool _isEnabled = false;
@@ -611,9 +616,11 @@ class HomeShareProvider extends ChangeNotifier {
   Future<void> _startLocationWatch() async {
     _positionSub?.cancel();
 
+    // accuracy: high — 실내 GPS 떨림으로 집 반경 밖으로 잘못 잡혀 알림이 사라지는
+    // 문제를 줄이기 위해 medium(±100m)에서 high(±10m)로 변경.
     // distanceFilter: 50m 이동 시에만 콜백 — 배터리 절약
     const LocationSettings settings = LocationSettings(
-      accuracy: LocationAccuracy.medium,
+      accuracy: LocationAccuracy.high,
       distanceFilter: 50,
     );
 
@@ -636,7 +643,7 @@ class HomeShareProvider extends ChangeNotifier {
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
+          accuracy: LocationAccuracy.high,
         ),
       );
       _onPosition(position, force: force);
@@ -653,7 +660,7 @@ class HomeShareProvider extends ChangeNotifier {
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
+          accuracy: LocationAccuracy.high,
         ),
       );
       _onPosition(position);
