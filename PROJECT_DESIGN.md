@@ -1,6 +1,7 @@
 # Partition App - 프로젝트 구조 및 기능 설계서
 
 ## 목차
+
 1. [프로젝트 개요](#프로젝트-개요)
 2. [전체 파일 구조](#전체-파일-구조)
 3. [아키텍처 패턴](#아키텍처-패턴)
@@ -16,6 +17,7 @@
 **Partition App**은 룸메이트 간 공간 관리 및 일정 공유를 위한 Flutter 기반 모바일 애플리케이션입니다.
 
 ### 주요 기능
+
 - 사용자 인증 (이메일/비밀번호, 카카오 로그인)
 - 그룹(가구) 생성 및 참여
 - 일정 관리 및 캘린더 조회
@@ -23,6 +25,7 @@
 - 집안일 선호도 설문
 
 ### 기술 스택
+
 - **프레임워크**: Flutter (Dart)
 - **상태 관리**: Provider
 - **HTTP 클라이언트**: Dio
@@ -127,9 +130,11 @@ Frontend/lib/
 ## 아키텍처 패턴
 
 ### Feature-First 구조
+
 각 기능을 독립적인 모듈로 구성하여 유지보수성과 확장성을 높였습니다.
 
 ### 레이어 구조
+
 ```
 ┌─────────────────────────────────────┐
 │         Presentation Layer           │  (Screens, Widgets)
@@ -149,9 +154,11 @@ Frontend/lib/
 ### 1. Core 모듈
 
 #### 1.1 AppConfig (`core/config/app_config.dart`)
+
 **역할**: 앱 전역 설정 및 API 엔드포인트 관리
 
 **주요 상수**:
+
 ```dart
 - baseUrl: 백엔드 API 기본 URL
 - connectTimeout: 연결 타임아웃 (30초)
@@ -168,9 +175,11 @@ Frontend/lib/
 ```
 
 #### 1.2 ApiClient (`core/network/api_client.dart`)
+
 **역할**: HTTP 통신을 위한 Dio 기반 클라이언트
 
 **주요 함수**:
+
 ```dart
 ApiClient()
   - 생성자: Dio 인스턴스 초기화 및 인터셉터 설정
@@ -199,6 +208,7 @@ Future<Response> delete(String path, {data, queryParameters, options})
 ```
 
 **동작 흐름**:
+
 1. 요청 전: 공개 엔드포인트 확인 → 인증 필요 시 토큰 추가
 2. 요청 로깅
 3. Dio 요청 실행
@@ -206,9 +216,11 @@ Future<Response> delete(String path, {data, queryParameters, options})
 5. 결과 반환
 
 #### 1.3 StorageService (`core/storage/storage_service.dart`)
+
 **역할**: 로컬 저장소 관리 (SharedPreferences + Flutter Secure Storage)
 
 **주요 함수**:
+
 ```dart
 // 초기화
 static Future<void> init()
@@ -242,13 +254,16 @@ static Future<bool> clear()
 ```
 
 **저장소 전략**:
+
 - **Secure Storage**: 토큰 등 민감한 정보
 - **SharedPreferences**: 사용자 ID, 이름, 온보딩 상태 등 일반 정보
 
 #### 1.4 AppRouter (`core/router/app_router.dart`)
+
 **역할**: 화면 라우팅 및 네비게이션 관리
 
 **주요 라우트**:
+
 ```dart
 - '/login': LoginScreen
 - '/onboarding-survey': OnboardingSurveyScreen
@@ -263,6 +278,7 @@ static Future<bool> clear()
 ```
 
 **주요 함수**:
+
 ```dart
 static Route<dynamic> generateRoute(RouteSettings settings)
   - 라우트 이름에 따라 적절한 화면 반환
@@ -278,9 +294,11 @@ class _AuthGuard extends StatefulWidget
 ### 2. Auth 모듈 (인증)
 
 #### 2.1 AuthService (`features/auth/services/auth_service.dart`)
+
 **역할**: 인증 관련 API 호출 및 토큰 관리
 
 **주요 함수**:
+
 ```dart
 Future<AuthResponseModel> login(String email, String password)
   - 이메일/비밀번호 로그인
@@ -332,9 +350,11 @@ Future<bool> isAuthenticated()
 ```
 
 #### 2.2 KakaoAuthService (`features/auth/services/kakao_auth_service.dart`)
+
 **역할**: 카카오 SDK를 통한 로그인 처리
 
 **주요 함수**:
+
 ```dart
 static Future<OAuthToken?> login()
   - 카카오 로그인 실행
@@ -351,9 +371,11 @@ static Future<User?> getUserInfo()
 ```
 
 #### 2.3 AuthProvider (`features/auth/providers/auth_provider.dart`)
+
 **역할**: 인증 상태 관리 (Provider 패턴)
 
 **상태 변수**:
+
 ```dart
 - UserModel? _user: 현재 로그인한 사용자
 - bool _isLoading: 로딩 상태
@@ -361,6 +383,7 @@ static Future<User?> getUserInfo()
 ```
 
 **주요 함수**:
+
 ```dart
 Future<bool> login(String email, String password)
   - 로그인 처리
@@ -391,6 +414,7 @@ Future<void> checkAuthStatus()
 ```
 
 **데이터 흐름**:
+
 ```
 Screen → AuthProvider → AuthService → ApiClient → Backend
                 ↓
@@ -404,9 +428,11 @@ Screen → AuthProvider → AuthService → ApiClient → Backend
 ### 3. Partition 모듈
 
 #### 3.1 PartitionService (`features/partition/services/partition_service.dart`)
+
 **역할**: 파티션 관련 API 호출
 
 **주요 함수**:
+
 ```dart
 Future<List<PartitionModel>> getPartitions()
   - 파티션 목록 조회
@@ -436,9 +462,11 @@ Future<void> deletePartition(String id)
 ```
 
 #### 3.2 CalendarService (`features/partition/services/calendar_service.dart`)
+
 **역할**: 캘린더 및 일정 관련 API 호출
 
 **주요 함수**:
+
 ```dart
 Future<CalendarResponseModel> getMonthlyCalendar({year, month})
   - 월간 캘린더 조회
@@ -464,9 +492,11 @@ Future<ScheduleResponseModel> registerSchedule({content, date})
 ### 4. 주요 화면 (Screens)
 
 #### 4.1 LoginScreen (`features/auth/screens/login_screen.dart`)
+
 **역할**: 로그인 화면
 
 **주요 함수**:
+
 ```dart
 Future<void> _handleKakaoLogin()
   - 카카오 로그인 처리
@@ -486,6 +516,7 @@ Future<String> _getTargetRoute()
 ```
 
 **라우팅 로직**:
+
 ```
 카카오 로그인 성공
   ↓
@@ -497,25 +528,31 @@ GUEST → 온보딩 화면
 ```
 
 #### 4.2 OnboardingSurveyScreen (`features/auth/screens/onboarding_survey_screen.dart`)
+
 **역할**: 온보딩 설문 (닉네임 입력)
 
 **주요 기능**:
+
 - 사용자 이름 입력
 - AuthService.updateUserName() 호출
 - 다음 화면으로 이동
 
 #### 4.3 PreferenceSurveyScreen (`features/auth/screens/preference_survey_screen.dart`)
+
 **역할**: 집안일 선호도 설문
 
 **주요 기능**:
+
 - 집안일 타입별 선호도 점수 입력 (1-5점)
 - AuthService.registerPreferences() 호출
 - 온보딩 완료 처리
 
 #### 4.4 PartitionHomeScreen (`features/partition/screens/partition_home_screen.dart`)
+
 **역할**: 파티션 홈 화면
 
 **주요 기능**:
+
 - 캘린더 위젯 표시
 - 일정 등록 모달 호출
 - CalendarService를 통한 일정 등록
@@ -525,9 +562,11 @@ GUEST → 온보딩 화면
 ### 5. 공통 위젯 (Shared Widgets)
 
 #### 5.1 ScheduleRegistrationModal (`shared/widgets/schedule_registration_modal.dart`)
+
 **역할**: 일정 등록 모달
 
 **주요 함수**:
+
 ```dart
 Future<void> _handleRegister()
   - 일정 등록 처리
@@ -541,6 +580,7 @@ String _formatDateToApi(DateTime date)
 ```
 
 **데이터 흐름**:
+
 ```
 사용자 입력 → 검증 → CalendarService.registerSchedule()
                               ↓
@@ -552,9 +592,11 @@ String _formatDateToApi(DateTime date)
 ```
 
 #### 5.2 HomeCalendarWidget (`shared/widgets/home_calendar_widget.dart`)
+
 **역할**: 홈 화면 캘린더 위젯
 
 **주요 기능**:
+
 - 월간 캘린더 표시
 - 날짜별 집안일/일정/공과금 개수 표시
 - 날짜 선택 시 일정 등록 모달 호출
@@ -564,6 +606,7 @@ String _formatDateToApi(DateTime date)
 ## 데이터 흐름도
 
 ### 로그인 플로우
+
 ```
 [LoginScreen]
     ↓
@@ -591,6 +634,7 @@ String _formatDateToApi(DateTime date)
 ```
 
 ### 일정 등록 플로우
+
 ```
 [ScheduleRegistrationModal]
     ↓ (사용자 입력)
@@ -610,6 +654,7 @@ String _formatDateToApi(DateTime date)
 ```
 
 ### 캘린더 조회 플로우
+
 ```
 [HomeCalendarWidget]
     ↓
@@ -631,6 +676,7 @@ String _formatDateToApi(DateTime date)
 ### API 엔드포인트 목록
 
 #### 인증 (Auth)
+
 - `POST /auth/login` - 이메일/비밀번호 로그인
 - `POST /auth/register` - 회원가입
 - `POST /auth/kakao` - 카카오 로그인
@@ -638,15 +684,18 @@ String _formatDateToApi(DateTime date)
 - `GET /users/me` - 사용자 정보 조회
 
 #### 그룹 (Household)
+
 - `POST /households` - 그룹 생성
 - `POST /users/me/preferences` - 선호도 등록
 
 #### 캘린더 (Calendar)
+
 - `GET /calendars/monthly?year={year}&month={month}` - 월간 캘린더
 - `GET /calendars/daily?date={date}` - 일간 캘린더
 - `POST /schedules` - 일정 등록
 
 #### 파티션 (Partition)
+
 - `GET /partitions` - 파티션 목록
 - `GET /partitions/{id}` - 파티션 상세
 - `POST /partitions` - 파티션 생성
@@ -656,6 +705,7 @@ String _formatDateToApi(DateTime date)
 ### API 요청/응답 구조
 
 #### 공통 응답 형식
+
 ```json
 {
   "isSuccess": boolean,
@@ -667,11 +717,13 @@ String _formatDateToApi(DateTime date)
 ```
 
 #### 인증 헤더
+
 ```
 Authorization: Bearer {accessToken}
 ```
 
 ### 에러 처리
+
 - `ApiException`: API 에러를 통일된 형식으로 변환
 - `ApiClient.onError`: 모든 에러 로깅
 - 각 Service에서 `ApiException.fromDioError()` 사용
@@ -683,6 +735,7 @@ Authorization: Bearer {accessToken}
 ### Provider 패턴 사용
 
 #### 전역 Provider
+
 ```dart
 MultiProvider(
   providers: [
@@ -693,16 +746,19 @@ MultiProvider(
 ```
 
 #### AuthProvider
+
 - **상태**: `_user`, `_isLoading`, `_errorMessage`
 - **메서드**: `login()`, `loginWithKakao()`, `register()`, `logout()`
 - **사용 화면**: LoginScreen, 모든 인증 관련 화면
 
 #### PartitionProvider
+
 - **상태**: 파티션 목록, 선택된 파티션 등
 - **메서드**: 파티션 CRUD 관련
 - **사용 화면**: PartitionListScreen, PartitionDetailScreen 등
 
 ### 상태 업데이트 흐름
+
 ```
 User Action
     ↓
@@ -726,6 +782,7 @@ UI 리빌드
 ## 주요 모델 (Models)
 
 ### AuthResponseModel
+
 ```dart
 {
   token: string,
@@ -734,6 +791,7 @@ UI 리빌드
 ```
 
 ### KakaoAuthResponseModel
+
 ```dart
 {
   isSuccess: boolean,
@@ -750,6 +808,7 @@ UI 리빌드
 ```
 
 ### CalendarResponseModel
+
 ```dart
 {
   isSuccess: boolean,
@@ -765,6 +824,7 @@ UI 리빌드
 ```
 
 ### ScheduleResponseModel
+
 ```dart
 {
   isSuccess: boolean,
@@ -780,11 +840,13 @@ UI 리빌드
 ## 보안 고려사항
 
 ### 토큰 관리
+
 - Access Token: Flutter Secure Storage에 저장
 - Refresh Token: Flutter Secure Storage에 저장
 - 자동 토큰 추가: ApiClient 인터셉터에서 처리
 
 ### 공개 엔드포인트
+
 - `/auth/login`
 - `/auth/register`
 - `/auth/kakao`
@@ -796,6 +858,7 @@ UI 리빌드
 ## 향후 확장 계획
 
 ### 추가 예정 기능
+
 1. 집안일 할당 기능
 2. 공과금 관리
 3. 알림 기능
@@ -803,6 +866,7 @@ UI 리빌드
 5. 오프라인 모드
 
 ### 개선 사항
+
 1. 토큰 갱신 자동화
 2. 에러 핸들링 강화
 3. 로딩 상태 개선
@@ -813,6 +877,7 @@ UI 리빌드
 ## 개발 가이드라인
 
 ### 파일 명명 규칙
+
 - 화면: `*_screen.dart`
 - 서비스: `*_service.dart`
 - 프로바이더: `*_provider.dart`
@@ -820,6 +885,7 @@ UI 리빌드
 - 위젯: `*_widget.dart` 또는 `*_modal.dart`
 
 ### 코드 구조
+
 1. Import 문 (외부 → 내부 순서)
 2. 클래스 정의
 3. 생성자
@@ -828,6 +894,7 @@ UI 리빌드
 6. Build 메서드 (위젯의 경우)
 
 ### 에러 처리
+
 - 모든 API 호출은 try-catch로 감싸기
 - ApiException으로 통일된 에러 처리
 - 사용자에게 친화적인 에러 메시지 표시
@@ -837,6 +904,7 @@ UI 리빌드
 ## 참고 자료
 
 ### 주요 의존성
+
 - `provider`: 상태 관리
 - `dio`: HTTP 클라이언트
 - `shared_preferences`: 로컬 저장소
@@ -846,6 +914,7 @@ UI 리빌드
 - `logger`: 로깅
 
 ### 개발 환경
+
 - Flutter SDK: 최신 안정 버전
 - Dart SDK: 3.0.0 이상
 - iOS: 12.0 이상
@@ -855,5 +924,4 @@ UI 리빌드
 
 **작성일**: 2025년
 **버전**: 1.0.0
-**작성자**: Partition App 개발팀
-
+**작성자**: Partition App 개발팀.
